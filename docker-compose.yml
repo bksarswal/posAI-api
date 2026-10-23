@@ -1,0 +1,51 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: posai-mongo
+    restart: always
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        # Start mongod in background with replica set enabled
+        mongod --replSet rs0 --bind_ip_all --port 27017 &
+        MONGOD_PID=$$!
+
+        # Wait for MongoDB to accept connections
+        echo "Waiting for mongod to start..."
+        until mongosh --port 27017 --eval "db.adminCommand('ping')" > /dev/null 2>&1; do
+          sleep 1
+        done
+
+        # Idempotently initiate replica set rs0
+        echo "Initiating replica set rs0..."
+        mongosh --port 27017 --eval '
+          try {
+            const status = rs.status();
+            if (status.ok) {
+              print("Replica set rs0 is already initiated.");
+            }
+          } catch (e) {
+            rs.initiate({
+              _id: "rs0",
+              members: [{ _id: 0, host: "localhost:27018" }]
+            });
+            print("Replica set rs0 initiated successfully.");
+          }
+        '
+
+        # Wait on background mongod process
+        wait $$MONGOD_PID
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --port 27017 --eval 'rs.status().ok ? 0 : 1' --quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  mongo_data:

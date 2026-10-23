@@ -1,0 +1,16 @@
+node_modules
+dist
+coverage
+.git
+.github
+.husky
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.log
+tests
+scripts
+.prettier*
+eslint.config.js
+vitest.config.ts

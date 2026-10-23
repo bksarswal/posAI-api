@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Lint, Format, Typecheck, Test, Build & OpenAPI Check
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      PORT: 8080
+      MONGODB_URI: mongodb://localhost:27017/posai-ci
+      JWT_ACCESS_SECRET: dummy_jwt_access_secret_for_ci_build_at_least_32_chars
+      JWT_REFRESH_SECRET: dummy_jwt_refresh_secret_for_ci_build_at_least_32_chars
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      CLIENT_URL: http://localhost:3000
+      BCRYPT_SALT_ROUNDS: 10
+      LOG_LEVEL: silent
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Build TypeScript to dist
+        run: npm run build
+
+      - name: Check OpenAPI specification freshness
+        run: |
+          npm run openapi:generate
+          git diff --exit-code openapi.json

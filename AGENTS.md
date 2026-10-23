@@ -15,7 +15,7 @@ Project spec: `docs/master-prompt.md`. This repo is the BACKEND only. The fronte
 
 - Use TypeScript only (strict). No `any` without a comment explaining why.
 - Use ES Modules (`import/export`). Relative imports include the `.js` extension.
-- Use pnpm as the package manager.
+- Use npm as the package manager.
 - Follow clean architecture and a modular structure.
 - Keep code simple, readable, and production-ready.
 - Avoid unnecessary abstractions and over-engineering.
