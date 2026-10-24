@@ -13,6 +13,7 @@ const QUERY_HOOKS = [
   'findOne',
   'findOneAndUpdate',
   'findOneAndDelete',
+  'findOneAndReplace',
   'updateOne',
   'updateMany',
   'deleteOne',
@@ -77,6 +78,9 @@ function validateNestedTenantFilters(
 }
 
 export function tenantScopingPlugin(schema: Schema): void {
+  // Mark schema as tenant-scoped so guard tests can verify compliance
+  (schema.options as Record<string, unknown>)['isTenantScoped'] = true;
+
   // 1. Ensure tenantId path exists in schema
   if (!schema.path('tenantId')) {
     schema.add({
@@ -84,7 +88,6 @@ export function tenantScopingPlugin(schema: Schema): void {
         type: Schema.Types.ObjectId,
         ref: 'Tenant',
         required: true,
-        index: true,
       },
     });
   }
@@ -99,37 +102,72 @@ export function tenantScopingPlugin(schema: Schema): void {
 
       const activeTenantId = getTenantId();
 
-      // Validate mutations: Prevent mutating tenantId on existing documents
+      // Validate mutations: Prevent mutating tenantId on existing documents & handle replacements
       if (
         hook === 'updateOne' ||
         hook === 'updateMany' ||
         hook === 'findOneAndUpdate' ||
-        hook === 'replaceOne'
+        hook === 'replaceOne' ||
+        hook === 'findOneAndReplace'
       ) {
-        const update = this.getUpdate() as Record<string, unknown> | null;
-        if (update) {
-          if ('tenantId' in update) {
-            throw new TenantScopingError(
-              'Mutating tenantId on an existing document is strictly forbidden.',
-            );
-          }
-          for (const op of ['$set', '$unset', '$rename', '$inc']) {
-            const opObj = update[op] as Record<string, unknown> | undefined;
-            if (opObj && 'tenantId' in opObj) {
+        const update = this.getUpdate();
+
+        // Forbid pipeline-style updates (array form) on tenant-scoped models
+        if (Array.isArray(update)) {
+          throw new TenantScopingError(
+            'Pipeline-style updates are forbidden on tenant-scoped models to prevent unscoped mutations.',
+          );
+        }
+
+        if (update && typeof update === 'object') {
+          const updateObj = update as Record<string, unknown>;
+
+          if (hook === 'replaceOne' || hook === 'findOneAndReplace') {
+            // Replacement documents: validate tenantId or auto-set to activeTenantId
+            if (
+              updateObj['tenantId'] !== undefined &&
+              updateObj['tenantId'] !== null
+            ) {
+              if (
+                activeTenantId &&
+                updateObj['tenantId'].toString() !== activeTenantId.toString()
+              ) {
+                throw new TenantScopingError(
+                  `Cross-tenant replacement rejected: Replacement document tenantId (${String(
+                    updateObj['tenantId'],
+                  )}) does not match active context (${activeTenantId.toString()})`,
+                );
+              }
+            } else if (activeTenantId) {
+              updateObj['tenantId'] = activeTenantId;
+              this.setUpdate(updateObj);
+            }
+          } else {
+            // Standard updates: strictly forbid modifying tenantId
+            if ('tenantId' in updateObj) {
               throw new TenantScopingError(
                 'Mutating tenantId on an existing document is strictly forbidden.',
               );
             }
-          }
+            for (const op of ['$set', '$unset', '$rename', '$inc']) {
+              const opObj = updateObj[op] as
+                Record<string, unknown> | undefined;
+              if (opObj && 'tenantId' in opObj) {
+                throw new TenantScopingError(
+                  'Mutating tenantId on an existing document is strictly forbidden.',
+                );
+              }
+            }
 
-          // Handle upsert: Ensure context tenantId is set on newly created document
-          if (options['upsert'] && activeTenantId) {
-            const setOnInsert =
-              (update['$setOnInsert'] as Record<string, unknown>) || {};
-            if (!setOnInsert['tenantId'] && !update['tenantId']) {
-              setOnInsert['tenantId'] = activeTenantId;
-              update['$setOnInsert'] = setOnInsert;
-              this.setUpdate(update);
+            // Handle upsert: Ensure context tenantId is set on newly created document
+            if (options['upsert'] && activeTenantId) {
+              const setOnInsert =
+                (updateObj['$setOnInsert'] as Record<string, unknown>) || {};
+              if (!setOnInsert['tenantId'] && !updateObj['tenantId']) {
+                setOnInsert['tenantId'] = activeTenantId;
+                updateObj['$setOnInsert'] = setOnInsert;
+                this.setUpdate(updateObj);
+              }
             }
           }
         }

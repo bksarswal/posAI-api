@@ -68,34 +68,43 @@ This document records architectural, technical, and operational decisions agreed
 ## 9. Sprint 1 Architectural Amendments & Security Rules
 
 1. **`AUTO_VERIFY_EMAIL` Flag**:
-   - Explicit boolean env variable (`AUTO_VERIFY_EMAIL`, default `false`).
+   - `AUTO_VERIFY_EMAIL` is parsed with `z.stringbool()` (never `z.coerce.boolean()`, which treats `"false"` as `true`).
    - Startup fail-safe: Application startup throws an error and exits immediately if `NODE_ENV === 'production'` and `AUTO_VERIFY_EMAIL === true`.
 
-2. **Single Global Bypass API (`withGlobalScope`)**:
+2. **Single Global Bypass API (`withGlobalScope`) & Allowlist Enforcement**:
    - `withGlobalScope` from `src/utils/tenantBypass.ts` is the only approved bypass mechanism for legitimate cross-tenant queries.
-   - Scanned and enforced by static analysis test (`tests/unit/bypassAllowlist.test.ts`).
+   - The bypass stays in `src/utils/tenantBypass.ts`. The allowlist test (`tests/unit/bypassAllowlist.test.ts`) is the enforcement. Auth service files get added to the allowlist when they are created.
+   - Native-driver escape hatches (`.collection.`, `connection.db`, `connection.collection(`, `getClient(`) outside the allowlist are strictly forbidden and guarded by the same test.
 
-3. **Staff `mustChangePassword` Requirement**:
-   - Staff created by owners or admins receive a temporary password with `mustChangePassword: true` and are required to change their password on first login before accessing operational APIs.
+3. **Staff `mustChangePassword` Requirement & Planned Gate**:
+   - Staff created by owners or admins receive a temporary password with `mustChangePassword: true` and are required to change their password on first login.
+   - Planned: Users with `mustChangePassword: true` get 403 `PASSWORD_CHANGE_REQUIRED` on every route except change-password, logout, and `GET /users/me` (implemented in the auth task).
 
 4. **Privilege & Role Hierarchy**:
    - `OWNER` has full tenant authority, including restaurant deletion and ownership management.
-   - `ADMIN` is a tenant-level administrative role with operational and staff management authority, but cannot transfer ownership or delete the tenant.
-   - Staff roles (`MANAGER`, `WAITER`, `CASHIER`, `CHEF`) must be assigned explicit `branchIds`; empty `branchIds` is not permitted for staff.
+   - Only `OWNER` can create or promote `ADMIN`. Nobody can change the `OWNER`'s role or status. Nobody can deactivate themselves.
+   - Empty `branchIds` does NOT mean all branches; only `OWNER` and `ADMIN` are tenant-wide. Staff roles (`MANAGER`, `WAITER`, `CASHIER`, `CHEF`) must be assigned explicit `branchIds`; empty `branchIds` is not permitted for staff.
 
 5. **Rate Limiting Keyed by IP + Email**:
    - Authentication endpoints (login, forgot-password) use composite rate-limiting keys (`${ip}:${normalizedEmail}`) to defend against credential-stuffing and targeted dictionary attacks.
 
-6. **Decoupled Signup & Onboarding**:
+6. **Decoupled Signup & Onboarding Flow**:
    - `POST /api/v1/auth/signup` creates only the `Tenant` and the `OWNER` `User`.
-   - Restaurant profile and initial branch are created after authentication via onboarding endpoints (`POST /api/v1/restaurant`, `POST /api/v1/branches`).
+   - Signup runs inside `tenantContext` plus a transaction, takes `businessName` in the body, handles slug collisions, and returns 409 on duplicate email (Mongo 11000).
+   - Restaurant profile and initial branch are created after authentication via onboarding endpoints:
+     - `POST /api/v1/restaurant` returns 409 if one already exists for the tenant.
+     - `POST /api/v1/branches` returns 409 `RESTAURANT_REQUIRED` if no restaurant exists yet for the tenant.
 
 7. **Shared Plugins Directory (`src/plugins`)**:
    - Shared Mongoose plugins (including `src/plugins/tenantScoping.plugin.ts`) live under `src/plugins/`.
 
-8. **Conflict Handling (409 Conflict)**:
-   - Unique constraint violations (e.g. duplicate branch code within the same tenant, or attempting to recreate a restaurant when one already exists for the tenant) return `409 Conflict`.
+8. **Branch Rules & One Main Branch Constraint**:
+   - Exactly one `isMain: true` branch per tenant, enforced at the database level via a partial unique index on `{ tenantId: 1 }` with `partialFilterExpression: { isMain: true }`.
 
-9. **Refresh Token 10-Second Grace Window (`REFRESH_TOKEN_ROTATED`)**:
-   - Replaying a just-rotated refresh token within 10 seconds returns `401 REFRESH_TOKEN_ROTATED` without revoking the token family (grace window for concurrent requests from multiple tabs).
-   - Replaying a token after 10 seconds triggers reuse detection and revokes the entire `familyId`.
+9. **Restaurant Multi-Tenancy Constraint**:
+   - Unique index on `{ tenantId }`: one restaurant per tenant for now (Sprint 11 relaxes this to support multi-restaurant per tenant).
+
+10. **Refresh Token 10-Second Grace Window (`REFRESH_TOKEN_ROTATED`)**:
+    - Replaying a just-rotated refresh token within 10 seconds returns `401 REFRESH_TOKEN_ROTATED` without revoking the token family (grace window for concurrent requests from multiple tabs).
+    - Replaying a token after 10 seconds triggers reuse detection and revokes the entire `familyId`.
+    - Frontend note: The frontend Axios response interceptor intercepts `401 REFRESH_TOKEN_ROTATED` and retries the refresh request once before giving up.

@@ -22,6 +22,22 @@ testItemSchema.plugin(tenantScopingPlugin);
 
 const TestItem = model<ITestItem>('TestItem', testItemSchema);
 
+interface ITestChild {
+  _id: Types.ObjectId;
+  tenantId: Types.ObjectId;
+  title: string;
+  parentId: Types.ObjectId;
+}
+
+const testChildSchema = new Schema<ITestChild>({
+  title: { type: String, required: true },
+  parentId: { type: Schema.Types.ObjectId, ref: 'TestItem', required: true },
+});
+
+testChildSchema.plugin(tenantScopingPlugin);
+
+const TestChild = model<ITestChild>('TestChild', testChildSchema);
+
 describe('Tenant Scoping Mongoose Plugin', () => {
   let replSet: MongoMemoryReplSet;
 
@@ -39,6 +55,7 @@ describe('Tenant Scoping Mongoose Plugin', () => {
   beforeEach(async () => {
     await withGlobalScope(async () => {
       await TestItem.deleteMany({});
+      await TestChild.deleteMany({});
     });
   });
 
@@ -440,6 +457,241 @@ describe('Tenant Scoping Mongoose Plugin', () => {
         bypassTenantScope: true,
       });
       expect(items).toHaveLength(1);
+    });
+  });
+
+  describe('Replacement Operations (findOneAndReplace & replaceOne)', () => {
+    it('findOneAndReplace successfully replaces document when replacement matches tenant context', async () => {
+      const tenantA = new Types.ObjectId();
+      const item = await runWithTenant(tenantA, async () => {
+        return TestItem.create({ name: 'Old Item', category: 'old' });
+      });
+
+      const replaced = await runWithTenant(tenantA, async () => {
+        return TestItem.findOneAndReplace(
+          { _id: item._id },
+          { name: 'New Item', category: 'new' },
+          { returnDocument: 'after' },
+        );
+      });
+
+      expect(replaced).not.toBeNull();
+      expect(replaced?.name).toBe('New Item');
+      expect(replaced?.tenantId.toString()).toBe(tenantA.toString());
+    });
+
+    it('findOneAndReplace throws TenantScopingError when replacement specifies a different tenantId', async () => {
+      const tenantA = new Types.ObjectId();
+      const tenantB = new Types.ObjectId();
+      const item = await runWithTenant(tenantA, async () => {
+        return TestItem.create({ name: 'Old Item' });
+      });
+
+      await expect(
+        runWithTenant(tenantA, async () => {
+          return TestItem.findOneAndReplace(
+            { _id: item._id },
+            { name: 'Hijacked Item', tenantId: tenantB },
+          );
+        }),
+      ).rejects.toThrow(TenantScopingError);
+    });
+
+    it('replaceOne auto-sets tenantId when replacement document has missing tenantId', async () => {
+      const tenantA = new Types.ObjectId();
+      const item = await runWithTenant(tenantA, async () => {
+        return TestItem.create({ name: 'Before Replace' });
+      });
+
+      await runWithTenant(tenantA, async () => {
+        await TestItem.replaceOne(
+          { _id: item._id },
+          { name: 'After Replace', category: 'replaced' },
+        );
+      });
+
+      const found = await runWithTenant(tenantA, async () => {
+        return TestItem.findById(item._id);
+      });
+      expect(found).not.toBeNull();
+      expect(found?.name).toBe('After Replace');
+      expect(found?.tenantId.toString()).toBe(tenantA.toString());
+    });
+
+    it('replaceOne rejects replacement document when replacement has a different tenantId', async () => {
+      const tenantA = new Types.ObjectId();
+      const tenantB = new Types.ObjectId();
+      const item = await runWithTenant(tenantA, async () => {
+        return TestItem.create({ name: 'Before Replace' });
+      });
+
+      await expect(
+        runWithTenant(tenantA, async () => {
+          return TestItem.replaceOne(
+            { _id: item._id },
+            { name: 'Cross Tenant Replace', tenantId: tenantB },
+          );
+        }),
+      ).rejects.toThrow(TenantScopingError);
+    });
+
+    it('throws TenantScopingError when findOneAndReplace is executed without tenant context', async () => {
+      await expect(
+        TestItem.findOneAndReplace(
+          { name: 'Unscoped Target' },
+          { name: 'Unscoped Replacement' },
+        ),
+      ).rejects.toThrow(TenantScopingError);
+    });
+  });
+
+  describe('Aggregation Pipeline Updates Rejection', () => {
+    it('forbids array-form pipeline update on updateOne', async () => {
+      const tenantA = new Types.ObjectId();
+      const item = await runWithTenant(tenantA, async () => {
+        return TestItem.create({ name: 'Original Name' });
+      });
+
+      await expect(
+        runWithTenant(tenantA, async () => {
+          return TestItem.updateOne(
+            { _id: item._id },
+            [{ $set: { name: 'Pipeline Updated Name' } }],
+            { updatePipeline: true },
+          );
+        }),
+      ).rejects.toThrow(TenantScopingError);
+    });
+
+    it('forbids array-form pipeline update on updateMany', async () => {
+      const tenantA = new Types.ObjectId();
+
+      await expect(
+        runWithTenant(tenantA, async () => {
+          return TestItem.updateMany(
+            { category: 'general' },
+            [{ $set: { category: 'new-pipeline' } }],
+            { updatePipeline: true },
+          );
+        }),
+      ).rejects.toThrow(TenantScopingError);
+    });
+
+    it('forbids array-form pipeline update on findOneAndUpdate', async () => {
+      const tenantA = new Types.ObjectId();
+
+      await expect(
+        runWithTenant(tenantA, async () => {
+          return TestItem.findOneAndUpdate(
+            { name: 'Test' },
+            [{ $set: { name: 'Pipelined' } }],
+            { updatePipeline: true },
+          );
+        }),
+      ).rejects.toThrow(TenantScopingError);
+    });
+  });
+
+  describe('Cursor Queries Scoping', () => {
+    it('cursor() on a find remains scoped to active tenant', async () => {
+      const tenantA = new Types.ObjectId();
+      const tenantB = new Types.ObjectId();
+
+      await runWithTenant(tenantA, async () => {
+        await TestItem.create({ name: 'Tenant A Item 1' });
+        await TestItem.create({ name: 'Tenant A Item 2' });
+      });
+
+      await runWithTenant(tenantB, async () => {
+        await TestItem.create({ name: 'Tenant B Item 1' });
+      });
+
+      const cursorResults = await runWithTenant(tenantA, async () => {
+        const cursor = TestItem.find().cursor();
+        const items: string[] = [];
+        for await (const doc of cursor) {
+          items.push(doc.name);
+        }
+        return items;
+      });
+
+      expect(cursorResults).toHaveLength(2);
+      expect(cursorResults).toEqual(
+        expect.arrayContaining(['Tenant A Item 1', 'Tenant A Item 2']),
+      );
+    });
+
+    it('cursor() without tenant context throws TenantScopingError on execution', async () => {
+      const cursor = TestItem.find().cursor();
+      await expect(async () => {
+        for await (const _doc of cursor) {
+          // should throw on cursor iteration
+        }
+      }).rejects.toThrow(TenantScopingError);
+    });
+  });
+
+  describe('Populate Between Scoped Models', () => {
+    it('populates reference correctly when parent belongs to same tenant', async () => {
+      const tenantA = new Types.ObjectId();
+
+      const { childId } = await runWithTenant(tenantA, async () => {
+        const parent = await TestItem.create({ name: 'Parent A' });
+        const child = await TestChild.create({
+          title: 'Child A',
+          parentId: parent._id,
+        });
+        return { childId: child._id, parentId: parent._id };
+      });
+
+      const populatedChild = await runWithTenant(tenantA, async () => {
+        return TestChild.findById(childId).populate<{ parentId: ITestItem }>(
+          'parentId',
+        );
+      });
+
+      expect(populatedChild).not.toBeNull();
+      expect(populatedChild?.parentId).not.toBeNull();
+      expect(populatedChild?.parentId.name).toBe('Parent A');
+      expect(populatedChild?.parentId.tenantId.toString()).toBe(
+        tenantA.toString(),
+      );
+    });
+
+    it('resolves populated reference to null when parent belongs to a different tenant', async () => {
+      const tenantA = new Types.ObjectId();
+      const tenantB = new Types.ObjectId();
+
+      // Tenant B creates parent
+      const parentB = await runWithTenant(tenantB, async () => {
+        return TestItem.create({ name: 'Secret Parent B' });
+      });
+
+      // Tenant A creates child pointing to Tenant B's parent ID
+      const childA = await runWithTenant(tenantA, async () => {
+        return TestChild.create({
+          title: 'Child A pointing to B',
+          parentId: parentB._id,
+        });
+      });
+
+      // Tenant A populates child
+      const populatedChild = await runWithTenant(tenantA, async () => {
+        return TestChild.findById(childA._id).populate<{
+          parentId: ITestItem | null;
+        }>('parentId');
+      });
+
+      expect(populatedChild).not.toBeNull();
+      // Because parent is tenant-scoped, Tenant B's parent cannot be returned to Tenant A
+      expect(populatedChild?.parentId).toBeNull();
+    });
+
+    it('populate without tenant context throws TenantScopingError', async () => {
+      const dummyId = new Types.ObjectId();
+      await expect(
+        TestChild.findById(dummyId).populate('parentId').exec(),
+      ).rejects.toThrow(TenantScopingError);
     });
   });
 });

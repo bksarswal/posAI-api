@@ -55,4 +55,34 @@ describe('Tenant Bypass Static Analysis Guard', () => {
         .join('\n')}`,
     ).toHaveLength(0);
   });
+
+  it('strictly forbids native-driver escape hatches (.collection., connection.db, connection.collection(, getClient() outside the approved allowlist', () => {
+    const files = getAllTypeScriptFiles(SRC_DIR);
+    const violations: { file: string; match: string }[] = [];
+
+    const ESCAPE_HATCH_PATTERN =
+      /(\.collection\.|connection\.db|connection\.collection\(|getClient\()/;
+
+    for (const file of files) {
+      const relativePath = path.normalize(
+        path.relative(path.resolve(SRC_DIR, '..'), file),
+      );
+      if (ALLOWLISTED_FILES.has(relativePath)) {
+        continue;
+      }
+
+      const content = fs.readFileSync(file, 'utf-8');
+      const match = content.match(ESCAPE_HATCH_PATTERN);
+      if (match) {
+        violations.push({ file: relativePath, match: match[0] });
+      }
+    }
+
+    expect(
+      violations,
+      `Detected unauthorized native-driver escape hatch usage outside allowlisted files:\n${violations
+        .map((v) => `  • ${v.file}: references '${v.match}'`)
+        .join('\n')}`,
+    ).toHaveLength(0);
+  });
 });
