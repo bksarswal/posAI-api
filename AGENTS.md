@@ -53,7 +53,7 @@ auth/
 └── index.ts
 ```
 
-Shared code lives in `src/config`, `src/middleware`, `src/utils`. Do not create files that stay unused or contain placeholder code.
+Shared code lives in `src/config`, `src/middleware`, `src/utils`, and `src/plugins` (e.g. `src/plugins/tenantScoping.plugin.ts` for Mongoose multi-tenancy). Do not create files that stay unused or contain placeholder code.
 
 ---
 

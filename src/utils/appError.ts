@@ -18,3 +18,10 @@ export class AppError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 }
+
+export class TenantScopingError extends AppError {
+  constructor(message: string, details?: unknown) {
+    super(message, 500, 'UNSCOPED_TENANT_ACCESS', details);
+    this.name = 'TenantScopingError';
+  }
+}

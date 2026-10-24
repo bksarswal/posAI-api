@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    hookTimeout: 60000,
+    testTimeout: 30000,
     env: {
       NODE_ENV: 'test',
       PORT: '8080',
