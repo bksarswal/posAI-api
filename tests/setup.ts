@@ -6,8 +6,8 @@ process.env.JWT_ACCESS_SECRET =
   'test_jwt_access_secret_at_least_32_characters_long';
 process.env.JWT_REFRESH_SECRET =
   'test_jwt_refresh_secret_at_least_32_characters_long';
-process.env.JWT_ACCESS_EXPIRES_IN = '15m';
-process.env.JWT_REFRESH_EXPIRES_IN = '7d';
+process.env.ACCESS_TOKEN_TTL_MINUTES = '15';
+process.env.REFRESH_TOKEN_TTL_DAYS = '7';
 process.env.CLIENT_URL = 'http://localhost:3000';
 process.env.BCRYPT_ROUNDS = '4';
 process.env.AUTO_VERIFY_EMAIL = 'false';

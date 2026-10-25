@@ -117,3 +117,10 @@ This document records architectural, technical, and operational decisions agreed
 
 13. **Signup Email Enumeration Trade-Off**:
     - `POST /api/v1/auth/signup` returns `409 EMAIL_ALREADY_REGISTERED` when an email already exists. While this reveals that an email is registered, strict composite rate limits (3/hr per IP+email and 10/hr per IP) serve as the mitigation against dictionary-based enumeration.
+
+14. **JWT Claims & Authoritative Database Role**:
+    - Access tokens are signed using pinned `HS256` with claims: `sub` (userId), `tid` (tenantId), `role`, `iss` ("posai-api"), `iat`, and `exp` (`ACCESS_TOKEN_TTL_MINUTES`).
+    - Security rule: Role is **never** trusted from the JWT claims. The `authenticate` middleware reloads the user document from the database on every authenticated request inside `runWithTenant(payload.tid)`. The authoritative role attached to `req.auth` is strictly derived from the current database state.
+
+15. **Per-Request Database Reload Trade-Off**:
+    - Reloading the user on every request guarantees immediate enforcement when a user is deactivated, when a tenant is suspended, when a password is changed, or when staff permissions are modified. While this incurs one indexed read per authenticated request, primary key lookups against MongoDB's working set resolve in sub-millisecond time, avoiding the complexity of distributed token revocation blocklists in early sprints.

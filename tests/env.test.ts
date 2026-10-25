@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { parseEnv } from '../src/config/env.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  parseEnv,
+  setEnvForTesting,
+  resetEnvForTesting,
+} from '../src/config/env.js';
 
 describe('parseEnv', () => {
   const validConfig = {
@@ -8,8 +12,8 @@ describe('parseEnv', () => {
     MONGODB_URI: 'mongodb://localhost:27017/posai-test',
     JWT_ACCESS_SECRET: 'a_very_long_valid_access_secret_32_chars_min',
     JWT_REFRESH_SECRET: 'a_very_long_valid_refresh_secret_32_chars_min',
-    JWT_ACCESS_EXPIRES_IN: '15m',
-    JWT_REFRESH_EXPIRES_IN: '7d',
+    ACCESS_TOKEN_TTL_MINUTES: '15',
+    REFRESH_TOKEN_TTL_DAYS: '7',
     CLIENT_URL: 'http://localhost:3000',
     BCRYPT_ROUNDS: '12',
     AUTO_VERIFY_EMAIL: 'false',
@@ -24,6 +28,8 @@ describe('parseEnv', () => {
     expect(parsed.MONGODB_URI).toBe('mongodb://localhost:27017/posai-test');
     expect(parsed.CLIENT_URL).toBe('http://localhost:3000');
     expect(parsed.BCRYPT_ROUNDS).toBe(12);
+    expect(parsed.ACCESS_TOKEN_TTL_MINUTES).toBe(15);
+    expect(parsed.REFRESH_TOKEN_TTL_DAYS).toBe(7);
     expect(parsed.AUTO_VERIFY_EMAIL).toBe(false);
     expect(parsed.TRUST_PROXY).toBe(0);
     expect(Object.isFrozen(parsed)).toBe(true);
@@ -46,6 +52,32 @@ describe('parseEnv', () => {
 
     expect(() => parseEnv(invalidConfig)).toThrowError(
       /JWT_ACCESS_SECRET: JWT_ACCESS_SECRET must be at least 32 characters/,
+    );
+  });
+
+  it('rejects JWT_ACCESS_SECRET starting with "change-me" in production', () => {
+    const prodConfig = {
+      ...validConfig,
+      NODE_ENV: 'production',
+      JWT_ACCESS_SECRET: 'change-me-to-a-very-long-secret-key-32-chars-long',
+    };
+
+    expect(() => parseEnv(prodConfig)).toThrowError(
+      /JWT_ACCESS_SECRET: JWT_ACCESS_SECRET cannot start with "change-me" in production/,
+    );
+  });
+
+  it('accepts valid JWT_ACCESS_SECRET in production that does not start with "change-me"', () => {
+    const prodConfig = {
+      ...validConfig,
+      NODE_ENV: 'production',
+      JWT_ACCESS_SECRET: 'secure_production_secret_key_at_least_32_chars_long',
+      BCRYPT_ROUNDS: '12',
+    };
+
+    const parsed = parseEnv(prodConfig);
+    expect(parsed.JWT_ACCESS_SECRET).toBe(
+      'secure_production_secret_key_at_least_32_chars_long',
     );
   });
 
@@ -113,5 +145,31 @@ describe('parseEnv', () => {
     const withoutProxy = { ...validConfig };
     delete (withoutProxy as Record<string, unknown>)['TRUST_PROXY'];
     expect(parseEnv(withoutProxy).TRUST_PROXY).toBe(0);
+  });
+
+  describe('setEnvForTesting / resetEnvForTesting safety guard', () => {
+    const originalNodeEnv = process.env['NODE_ENV'];
+
+    afterEach(() => {
+      process.env['NODE_ENV'] = originalNodeEnv;
+    });
+
+    it('throws if called when NODE_ENV is not test', () => {
+      process.env['NODE_ENV'] = 'production';
+
+      expect(() => setEnvForTesting({ PORT: 9999 })).toThrowError(
+        /setEnvForTesting is only permitted when NODE_ENV === "test"/,
+      );
+
+      expect(() => resetEnvForTesting()).toThrowError(
+        /resetEnvForTesting is only permitted when NODE_ENV === "test"/,
+      );
+    });
+
+    it('works when NODE_ENV is test', () => {
+      process.env['NODE_ENV'] = 'test';
+      setEnvForTesting({ PORT: 9090 });
+      resetEnvForTesting();
+    });
   });
 });

@@ -1,15 +1,26 @@
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
+import bcryptjs from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { TenantService } from '../tenant/index.js';
 import { UserService } from '../user/index.js';
+import * as RefreshTokenService from './refreshToken.service.js';
 import { generateTenantSlug } from '../../utils/slug.js';
-import { hashPassword } from '../../utils/password.js';
+import { hashPassword, verifyPassword } from '../../utils/password.js';
+import { generateToken, hashToken } from '../../utils/token.js';
 import { runWithTenant } from '../../utils/tenantContext.js';
 import { AppError } from '../../utils/appError.js';
 import { env } from '../../config/env.js';
-import type { SignupInput } from './auth.validation.js';
-import type { SignupResponseData } from './auth.types.js';
+import type { SignupInput, LoginInput } from './auth.validation.js';
+import type { SignupResponseData, LoginResponseUser } from './auth.types.js';
 import type { UserDocument } from '../user/user.interface.js';
 import type { TenantDocument } from '../tenant/tenant.interface.js';
+
+// Precomputed dummy hash created with the configured work factor for timing-safe login
+const DUMMY_HASH = bcryptjs.hashSync(
+  'posai_timing_attack_defense_dummy_password',
+  env.BCRYPT_ROUNDS,
+);
 
 /**
  * Handles account registration:
@@ -134,4 +145,136 @@ export async function signup(input: SignupInput): Promise<SignupResponseData> {
   }
 
   throw lastError;
+}
+
+export interface LoginResult {
+  accessToken: string;
+  rawRefreshToken: string;
+  user: LoginResponseUser;
+}
+
+export interface LoginContext {
+  ip?: string;
+  userAgent?: string;
+}
+
+/**
+ * Handles user login:
+ * 1. Looks up user by email globally, with timing attack mitigation.
+ * 2. Compares password hash (always invokes verifyPassword exactly once).
+ * 3. Enforces post-credential status rules: emailVerified, ACTIVE, tenant SUSPENDED.
+ * 4. Issues access JWT and persists single-use refresh token.
+ */
+export async function login(
+  input: LoginInput,
+  context: LoginContext = {},
+): Promise<LoginResult> {
+  const normalizedEmail = input.email.toLowerCase().trim();
+
+  // Global lookup for user including +passwordHash
+  const user = await UserService.findUserByEmailForLogin(normalizedEmail);
+
+  if (!user) {
+    // Timing defense: compare against dummy hash so duration is uniform
+    await verifyPassword(input.password, DUMMY_HASH);
+    throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+  }
+
+  const isPasswordValid = await verifyPassword(
+    input.password,
+    user.passwordHash,
+  );
+
+  if (!isPasswordValid) {
+    throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
+  }
+
+  // Post-password checks
+  if (!user.emailVerified) {
+    throw new AppError(
+      'Email is not verified. Please verify your email before logging in.',
+      403,
+      'EMAIL_NOT_VERIFIED',
+    );
+  }
+
+  if (user.status === 'INACTIVE') {
+    throw new AppError(
+      'Account is deactivated. Please contact your administrator.',
+      403,
+      'ACCOUNT_DISABLED',
+    );
+  }
+
+  const tenant = await TenantService.findTenantById(user.tenantId.toString());
+  if (!tenant || tenant.status === 'SUSPENDED') {
+    throw new AppError('Tenant account is suspended.', 403, 'TENANT_SUSPENDED');
+  }
+
+  // Issue access JWT (pinned HS256, standard issuer, claims: sub, tid, role)
+  const accessToken = jwt.sign(
+    {
+      sub: user._id.toString(),
+      tid: user.tenantId.toString(),
+      role: user.role,
+    },
+    env.JWT_ACCESS_SECRET,
+    {
+      algorithm: 'HS256',
+      issuer: 'posai-api',
+      expiresIn: `${env.ACCESS_TOKEN_TTL_MINUTES}m`,
+    },
+  );
+
+  // Issue refresh token
+  const rawRefreshToken = generateToken();
+  const tokenHash = hashToken(rawRefreshToken);
+  const familyId = crypto.randomUUID();
+  const expiresAt = new Date(
+    Date.now() + env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+  );
+
+  await RefreshTokenService.createRefreshToken({
+    tenantId: user.tenantId,
+    userId: user._id,
+    tokenHash,
+    familyId,
+    expiresAt,
+    ip: context.ip,
+    userAgent: context.userAgent,
+  });
+
+  // Update lastLoginAt inside tenant context
+  await runWithTenant(user.tenantId, async () => {
+    await UserService.updateLastLogin(user._id.toString());
+  });
+
+  return {
+    accessToken,
+    rawRefreshToken,
+    user: {
+      id: user._id.toString(),
+      tenantId: user.tenantId.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      branchIds: (user.branchIds || []).map((b) => b.toString()),
+      mustChangePassword: user.mustChangePassword ?? false,
+    },
+  };
+}
+
+/**
+ * Handles user logout:
+ * Revokes the token family if refresh cookie is present and known.
+ * Idempotent: always succeeds.
+ */
+export async function logout(rawRefreshToken?: string): Promise<void> {
+  if (rawRefreshToken && typeof rawRefreshToken === 'string') {
+    const tokenHash = hashToken(rawRefreshToken);
+    const existing = await RefreshTokenService.findTokenByHash(tokenHash);
+    if (existing) {
+      await RefreshTokenService.revokeFamily(existing.familyId);
+    }
+  }
 }

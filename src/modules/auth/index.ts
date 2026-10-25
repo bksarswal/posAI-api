@@ -1,5 +1,6 @@
 export * as AuthService from './auth.service.js';
 export * as AuthController from './auth.controller.js';
+export * as RefreshTokenService from './refreshToken.service.js';
 export {
   authRouter,
   createAuthRouter,

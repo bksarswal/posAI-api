@@ -331,6 +331,187 @@
           }
         }
       }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "User login",
+        "description": "Authenticates user with email and password, issuing an access token and HttpOnly refresh cookie.",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "description": "Login credentials",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "tenantId": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            },
+                            "role": {
+                              "type": "string",
+                              "enum": [
+                                "OWNER",
+                                "ADMIN",
+                                "MANAGER",
+                                "WAITER",
+                                "CASHIER",
+                                "CHEF"
+                              ]
+                            },
+                            "branchIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "mustChangePassword": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "tenantId",
+                            "name",
+                            "email",
+                            "role",
+                            "branchIds",
+                            "mustChangePassword"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "accessToken",
+                        "user"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid email or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account disabled, email unverified, or tenant suspended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "summary": "User logout",
+        "description": "Revokes active refresh token family and clears HttpOnly refresh cookie. Idempotent.",
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "Logged out successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "webhooks": {}

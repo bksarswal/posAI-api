@@ -40,3 +40,29 @@ export const signupSuccessResponseSchema = z.object({
     }),
   }),
 });
+
+export const loginSchema = z
+  .object({
+    email: z.string().trim().email('Invalid email address').toLowerCase(),
+    password: z.string().min(1, 'Password is required'),
+  })
+  .strict();
+
+export type LoginInput = z.infer<typeof loginSchema>;
+
+export const loginSuccessResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
+  data: z.object({
+    accessToken: z.string(),
+    user: z.object({
+      id: z.string(),
+      tenantId: z.string(),
+      name: z.string(),
+      email: z.string(),
+      role: z.enum(['OWNER', 'ADMIN', 'MANAGER', 'WAITER', 'CASHIER', 'CHEF']),
+      branchIds: z.array(z.string()),
+      mustChangePassword: z.boolean(),
+    }),
+  }),
+});

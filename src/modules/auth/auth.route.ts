@@ -3,17 +3,25 @@ import * as AuthController from './auth.controller.js';
 import {
   signupSchema,
   signupSuccessResponseSchema,
+  loginSchema,
+  loginSuccessResponseSchema,
 } from './auth.validation.js';
 import { validateBody } from '../../middleware/validate.js';
 import {
   createRateLimiter,
   ipKeyGenerator,
 } from '../../middleware/rateLimit.js';
-import { openApiRegistry, ErrorResponseSchema } from '../../config/openapi.js';
+import {
+  openApiRegistry,
+  SuccessResponseSchema,
+  ErrorResponseSchema,
+} from '../../config/openapi.js';
 
 export interface AuthRateLimitOptions {
   signupIp?: { windowMs?: number; max?: number };
   signupIpEmail?: { windowMs?: number; max?: number };
+  loginIp?: { windowMs?: number; max?: number };
+  loginIpEmail?: { windowMs?: number; max?: number };
 }
 
 // Register OpenAPI path for POST /api/v1/auth/signup
@@ -70,13 +78,95 @@ openApiRegistry.registerPath({
   },
 });
 
+// Register OpenAPI path for POST /api/v1/auth/login
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/login',
+  summary: 'User login',
+  description:
+    'Authenticates user with email and password, issuing an access token and HttpOnly refresh cookie.',
+  tags: ['Auth'],
+  request: {
+    body: {
+      description: 'Login credentials',
+      content: {
+        'application/json': {
+          schema: loginSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Login successful',
+      content: {
+        'application/json': {
+          schema: loginSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation failed',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Invalid email or password',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    403: {
+      description: 'Account disabled, email unverified, or tenant suspended',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+// Register OpenAPI path for POST /api/v1/auth/logout
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/logout',
+  summary: 'User logout',
+  description:
+    'Revokes active refresh token family and clears HttpOnly refresh cookie. Idempotent.',
+  tags: ['Auth'],
+  responses: {
+    200: {
+      description: 'Logged out successfully',
+      content: {
+        'application/json': {
+          schema: SuccessResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 /**
  * Builds the Auth router with configured rate limiters.
  */
 export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
   const router = Router();
 
-  // 1. IP-level rate limiter: 10 per hour default
+  // 1. Signup rate limiters
   const signupIpLimiter = createRateLimiter({
     windowMs: rateLimits?.signupIp?.windowMs ?? 60 * 60 * 1000,
     max: rateLimits?.signupIp?.max ?? 10,
@@ -84,7 +174,6 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
     message: 'Too many signup attempts from this IP. Please try again later.',
   });
 
-  // 2. Composite IP+email rate limiter: 3 per hour default
   const signupIpEmailLimiter = createRateLimiter({
     windowMs: rateLimits?.signupIpEmail?.windowMs ?? 60 * 60 * 1000,
     max: rateLimits?.signupIpEmail?.max ?? 3,
@@ -106,6 +195,35 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
       'Too many signup attempts for this email address. Please try again later.',
   });
 
+  // 2. Login rate limiters: 50/15m per IP, 10/15m per IP+email
+  const loginIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.loginIp?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.loginIp?.max ?? 50,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message: 'Too many login attempts from this IP. Please try again later.',
+  });
+
+  const loginIpEmailLimiter = createRateLimiter({
+    windowMs: rateLimits?.loginIpEmail?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.loginIpEmail?.max ?? 10,
+    keyGenerator: (req) => {
+      const ip = ipKeyGenerator(req.ip ?? '127.0.0.1');
+      let email = '';
+      if (
+        typeof req.body === 'object' &&
+        req.body !== null &&
+        typeof (req.body as Record<string, unknown>)['email'] === 'string'
+      ) {
+        email = ((req.body as Record<string, unknown>)['email'] as string)
+          .trim()
+          .toLowerCase();
+      }
+      return `${ip}:${email}`;
+    },
+    message:
+      'Too many login attempts for this account. Please try again later.',
+  });
+
   router.post(
     '/signup',
     signupIpLimiter,
@@ -113,6 +231,16 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
     validateBody(signupSchema),
     AuthController.signup,
   );
+
+  router.post(
+    '/login',
+    loginIpLimiter,
+    loginIpEmailLimiter,
+    validateBody(loginSchema),
+    AuthController.login,
+  );
+
+  router.post('/logout', AuthController.logout);
 
   return router;
 }

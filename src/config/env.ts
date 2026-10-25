@@ -21,12 +21,8 @@ export const envSchema = z
       .string()
       .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
 
-    JWT_ACCESS_EXPIRES_IN: z
-      .string()
-      .min(1, 'JWT_ACCESS_EXPIRES_IN is required'),
-    JWT_REFRESH_EXPIRES_IN: z
-      .string()
-      .min(1, 'JWT_REFRESH_EXPIRES_IN is required'),
+    ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(15),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
 
     CLIENT_URL: z.string().url('CLIENT_URL must be a valid URL'),
 
@@ -46,20 +42,31 @@ export const envSchema = z
       .default('info'),
   })
   .superRefine((data, ctx) => {
-    if (data.NODE_ENV === 'production' && data.BCRYPT_ROUNDS < 10) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'BCRYPT_ROUNDS must be at least 10 in production',
-        path: ['BCRYPT_ROUNDS'],
-      });
-    }
+    if (data.NODE_ENV === 'production') {
+      if (data.BCRYPT_ROUNDS < 10) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'BCRYPT_ROUNDS must be at least 10 in production',
+          path: ['BCRYPT_ROUNDS'],
+        });
+      }
 
-    if (data.NODE_ENV === 'production' && data.AUTO_VERIFY_EMAIL === true) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'AUTO_VERIFY_EMAIL cannot be true in production',
-        path: ['AUTO_VERIFY_EMAIL'],
-      });
+      if (data.AUTO_VERIFY_EMAIL === true) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'AUTO_VERIFY_EMAIL cannot be true in production',
+          path: ['AUTO_VERIFY_EMAIL'],
+        });
+      }
+
+      if (data.JWT_ACCESS_SECRET.startsWith('change-me')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'JWT_ACCESS_SECRET cannot start with "change-me" in production',
+          path: ['JWT_ACCESS_SECRET'],
+        });
+      }
     }
   });
 
@@ -102,14 +109,26 @@ export let env = loadedEnv;
 
 /**
  * Test helper to override specific env variables in unit/integration tests.
+ * Throws unless NODE_ENV === 'test'.
  */
 export function setEnvForTesting(overrides: Partial<Env>): void {
+  if (process.env['NODE_ENV'] !== 'test') {
+    throw new Error(
+      'setEnvForTesting is only permitted when NODE_ENV === "test"',
+    );
+  }
   env = Object.freeze({ ...env, ...overrides });
 }
 
 /**
  * Resets env to its initial parsed state after test overrides.
+ * Throws unless NODE_ENV === 'test'.
  */
 export function resetEnvForTesting(): void {
+  if (process.env['NODE_ENV'] !== 'test') {
+    throw new Error(
+      'resetEnvForTesting is only permitted when NODE_ENV === "test"',
+    );
+  }
   env = loadedEnv;
 }

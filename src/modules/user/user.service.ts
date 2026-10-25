@@ -25,6 +25,34 @@ export async function findUserByEmailGlobal(
 }
 
 /**
+ * Global cross-tenant user lookup by email for login, explicitly selecting +passwordHash.
+ * Legitimate cross-tenant query explicitly wrapped in withGlobalScope.
+ */
+export async function findUserByEmailForLogin(
+  email: string,
+): Promise<UserDocument | null> {
+  return withGlobalScope(async () => {
+    return User.findOne({ email: email.toLowerCase().trim() }).select(
+      '+passwordHash',
+    );
+  });
+}
+
+/**
+ * Finds a user by ID within the active tenant execution context.
+ */
+export async function findUserById(id: string): Promise<UserDocument | null> {
+  return User.findById(id);
+}
+
+/**
+ * Updates the lastLoginAt timestamp for a user within the active tenant execution context.
+ */
+export async function updateLastLogin(userId: string): Promise<void> {
+  await User.updateOne({ _id: userId }, { $set: { lastLoginAt: new Date() } });
+}
+
+/**
  * Creates a user within the active tenant execution context.
  */
 export async function createUser(
