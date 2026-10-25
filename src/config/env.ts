@@ -3,41 +3,53 @@ import { z } from 'zod';
 
 dotenv.config({ quiet: true });
 
-export const envSchema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
+export const envSchema = z
+  .object({
+    NODE_ENV: z
+      .enum(['development', 'test', 'production'])
+      .default('development'),
 
-  PORT: z.coerce.number().int().positive().default(8080),
+    PORT: z.coerce.number().int().positive().default(8080),
 
-  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+    MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
 
-  // Minimum 32 characters enforced to prevent weak secrets in production.
-  JWT_ACCESS_SECRET: z
-    .string()
-    .min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-  JWT_REFRESH_SECRET: z
-    .string()
-    .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
+    // Minimum 32 characters enforced to prevent weak secrets in production.
+    JWT_ACCESS_SECRET: z
+      .string()
+      .min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
+    JWT_REFRESH_SECRET: z
+      .string()
+      .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
 
-  JWT_ACCESS_EXPIRES_IN: z.string().min(1, 'JWT_ACCESS_EXPIRES_IN is required'),
-  JWT_REFRESH_EXPIRES_IN: z
-    .string()
-    .min(1, 'JWT_REFRESH_EXPIRES_IN is required'),
+    JWT_ACCESS_EXPIRES_IN: z
+      .string()
+      .min(1, 'JWT_ACCESS_EXPIRES_IN is required'),
+    JWT_REFRESH_EXPIRES_IN: z
+      .string()
+      .min(1, 'JWT_REFRESH_EXPIRES_IN is required'),
 
-  CLIENT_URL: z.string().url('CLIENT_URL must be a valid URL'),
+    CLIENT_URL: z.string().url('CLIENT_URL must be a valid URL'),
 
-  BCRYPT_SALT_ROUNDS: z.coerce
-    .number()
-    .int()
-    .min(8, 'BCRYPT_SALT_ROUNDS must be at least 8')
-    .max(20, 'BCRYPT_SALT_ROUNDS must be at most 20')
-    .default(12),
+    BCRYPT_ROUNDS: z.coerce
+      .number()
+      .int()
+      .min(4, 'BCRYPT_ROUNDS must be at least 4')
+      .max(15, 'BCRYPT_ROUNDS must be at most 15')
+      .default(12),
 
-  LOG_LEVEL: z
-    .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-    .default('info'),
-});
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.NODE_ENV === 'production' && data.BCRYPT_ROUNDS < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'BCRYPT_ROUNDS must be at least 10 in production',
+        path: ['BCRYPT_ROUNDS'],
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 

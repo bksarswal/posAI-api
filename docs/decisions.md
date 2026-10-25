@@ -108,3 +108,6 @@ This document records architectural, technical, and operational decisions agreed
     - Replaying a just-rotated refresh token within 10 seconds returns `401 REFRESH_TOKEN_ROTATED` without revoking the token family (grace window for concurrent requests from multiple tabs).
     - Replaying a token after 10 seconds triggers reuse detection and revokes the entire `familyId`.
     - Frontend note: The frontend Axios response interceptor intercepts `401 REFRESH_TOKEN_ROTATED` and retries the refresh request once before giving up.
+
+11. **Global User Email Uniqueness**:
+    - The `User` model enforces a global unique index on `{ email: 1 }` (NOT compound per-tenant) because user authentication (`POST /api/v1/auth/login`) is performed using email and password alone without requiring a preliminary tenant identifier.

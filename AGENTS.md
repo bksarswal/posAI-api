@@ -134,7 +134,7 @@ export const signup = async (req: Request, res: Response) => {};
 
 ## Naming
 
-`<feature>.controller.ts`, `.service.ts`, `.model.ts`, `.validation.ts`, `.interface.ts`, `.types.ts`, `.route.ts`.
+`<feature>.controller.ts`, `.service.ts`, `.model.ts`, `.validation.ts`, `.interface.ts`, `.types.ts`, `.route.ts`. (Deliberate exception: `src/modules/auth/refreshToken.model.ts` and `refreshToken.interface.ts` because the model belongs to the auth module).
 
 ## Imports
 

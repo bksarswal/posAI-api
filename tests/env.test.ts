@@ -11,7 +11,7 @@ describe('parseEnv', () => {
     JWT_ACCESS_EXPIRES_IN: '15m',
     JWT_REFRESH_EXPIRES_IN: '7d',
     CLIENT_URL: 'http://localhost:3000',
-    BCRYPT_SALT_ROUNDS: '12',
+    BCRYPT_ROUNDS: '12',
     LOG_LEVEL: 'silent',
   };
 
@@ -21,13 +21,13 @@ describe('parseEnv', () => {
     expect(parsed.NODE_ENV).toBe('test');
     expect(parsed.MONGODB_URI).toBe('mongodb://localhost:27017/posai-test');
     expect(parsed.CLIENT_URL).toBe('http://localhost:3000');
-    expect(parsed.BCRYPT_SALT_ROUNDS).toBe(12);
+    expect(parsed.BCRYPT_ROUNDS).toBe(12);
     expect(Object.isFrozen(parsed)).toBe(true);
   });
 
   it('throws an error listing missing required variables', () => {
     const invalidConfig = { ...validConfig };
-    delete (invalidConfig as Record<string, unknown>).MONGODB_URI;
+    delete (invalidConfig as Record<string, unknown>)['MONGODB_URI'];
 
     expect(() => parseEnv(invalidConfig)).toThrowError(
       /MONGODB_URI: Invalid input: expected string, received undefined/,
@@ -48,9 +48,32 @@ describe('parseEnv', () => {
   it('throws an error when numeric fields have an invalid format', () => {
     const invalidConfig = {
       ...validConfig,
-      BCRYPT_SALT_ROUNDS: 'not-a-number',
+      BCRYPT_ROUNDS: 'not-a-number',
     };
 
-    expect(() => parseEnv(invalidConfig)).toThrowError(/BCRYPT_SALT_ROUNDS:/);
+    expect(() => parseEnv(invalidConfig)).toThrowError(/BCRYPT_ROUNDS:/);
+  });
+
+  it('fails startup if NODE_ENV=production and BCRYPT_ROUNDS < 10', () => {
+    const prodInvalidConfig = {
+      ...validConfig,
+      NODE_ENV: 'production',
+      BCRYPT_ROUNDS: '9',
+    };
+
+    expect(() => parseEnv(prodInvalidConfig)).toThrowError(
+      /BCRYPT_ROUNDS: BCRYPT_ROUNDS must be at least 10 in production/,
+    );
+  });
+
+  it('accepts BCRYPT_ROUNDS >= 10 in production', () => {
+    const prodValidConfig = {
+      ...validConfig,
+      NODE_ENV: 'production',
+      BCRYPT_ROUNDS: '10',
+    };
+
+    const parsed = parseEnv(prodValidConfig);
+    expect(parsed.BCRYPT_ROUNDS).toBe(10);
   });
 });
