@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import mongoose from 'mongoose';
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
@@ -9,6 +10,11 @@ let server: Server | null = null;
 async function startServer(): Promise<void> {
   try {
     await connectDB();
+
+    // Await init() on every registered model so unique indexes exist before the first request
+    for (const modelName of mongoose.modelNames()) {
+      await mongoose.model(modelName).init();
+    }
 
     server = app.listen(env.PORT, () => {
       logger.info(

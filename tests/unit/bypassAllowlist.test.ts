@@ -10,6 +10,8 @@ describe('Tenant Bypass Static Analysis Guard', () => {
     path.normalize('src/plugins/tenantScoping.plugin.ts'),
     path.normalize('src/utils/tenantContext.ts'),
     path.normalize('src/utils/tenantBypass.ts'),
+    // user.service.ts is allowlisted for global email lookups during auth/signup
+    path.normalize('src/modules/user/user.service.ts'),
   ]);
 
   function getAllTypeScriptFiles(dir: string): string[] {

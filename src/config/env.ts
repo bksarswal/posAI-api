@@ -37,6 +37,10 @@ export const envSchema = z
       .max(15, 'BCRYPT_ROUNDS must be at most 15')
       .default(12),
 
+    AUTO_VERIFY_EMAIL: z.stringbool().default(false),
+
+    TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
@@ -47,6 +51,14 @@ export const envSchema = z
         code: z.ZodIssueCode.custom,
         message: 'BCRYPT_ROUNDS must be at least 10 in production',
         path: ['BCRYPT_ROUNDS'],
+      });
+    }
+
+    if (data.NODE_ENV === 'production' && data.AUTO_VERIFY_EMAIL === true) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'AUTO_VERIFY_EMAIL cannot be true in production',
+        path: ['AUTO_VERIFY_EMAIL'],
       });
     }
   });
@@ -86,4 +98,18 @@ try {
   process.exit(1);
 }
 
-export const env = loadedEnv;
+export let env = loadedEnv;
+
+/**
+ * Test helper to override specific env variables in unit/integration tests.
+ */
+export function setEnvForTesting(overrides: Partial<Env>): void {
+  env = Object.freeze({ ...env, ...overrides });
+}
+
+/**
+ * Resets env to its initial parsed state after test overrides.
+ */
+export function resetEnvForTesting(): void {
+  env = loadedEnv;
+}

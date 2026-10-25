@@ -111,3 +111,9 @@ This document records architectural, technical, and operational decisions agreed
 
 11. **Global User Email Uniqueness**:
     - The `User` model enforces a global unique index on `{ email: 1 }` (NOT compound per-tenant) because user authentication (`POST /api/v1/auth/login`) is performed using email and password alone without requiring a preliminary tenant identifier.
+
+12. **In-Memory Rate Limiting**:
+    - Rate limiters use `express-rate-limit`'s built-in in-memory store. This is suitable for single-instance deployments. Distributed rate limiting via Redis will be introduced in a future sprint for horizontal multi-instance scaling.
+
+13. **Signup Email Enumeration Trade-Off**:
+    - `POST /api/v1/auth/signup` returns `409 EMAIL_ALREADY_REGISTERED` when an email already exists. While this reveals that an email is registered, strict composite rate limits (3/hr per IP+email and 10/hr per IP) serve as the mitigation against dictionary-based enumeration.

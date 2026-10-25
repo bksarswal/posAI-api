@@ -10,4 +10,6 @@ process.env.JWT_ACCESS_EXPIRES_IN = '15m';
 process.env.JWT_REFRESH_EXPIRES_IN = '7d';
 process.env.CLIENT_URL = 'http://localhost:3000';
 process.env.BCRYPT_ROUNDS = '4';
+process.env.AUTO_VERIFY_EMAIL = 'false';
+process.env.TRUST_PROXY = '0';
 process.env.LOG_LEVEL = 'silent';

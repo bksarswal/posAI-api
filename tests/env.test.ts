@@ -12,6 +12,8 @@ describe('parseEnv', () => {
     JWT_REFRESH_EXPIRES_IN: '7d',
     CLIENT_URL: 'http://localhost:3000',
     BCRYPT_ROUNDS: '12',
+    AUTO_VERIFY_EMAIL: 'false',
+    TRUST_PROXY: '0',
     LOG_LEVEL: 'silent',
   };
 
@@ -22,6 +24,8 @@ describe('parseEnv', () => {
     expect(parsed.MONGODB_URI).toBe('mongodb://localhost:27017/posai-test');
     expect(parsed.CLIENT_URL).toBe('http://localhost:3000');
     expect(parsed.BCRYPT_ROUNDS).toBe(12);
+    expect(parsed.AUTO_VERIFY_EMAIL).toBe(false);
+    expect(parsed.TRUST_PROXY).toBe(0);
     expect(Object.isFrozen(parsed)).toBe(true);
   });
 
@@ -75,5 +79,39 @@ describe('parseEnv', () => {
 
     const parsed = parseEnv(prodValidConfig);
     expect(parsed.BCRYPT_ROUNDS).toBe(10);
+  });
+
+  it('parses AUTO_VERIFY_EMAIL stringbool correctly and defaults to false', () => {
+    const withTrue = { ...validConfig, AUTO_VERIFY_EMAIL: 'true' };
+    expect(parseEnv(withTrue).AUTO_VERIFY_EMAIL).toBe(true);
+
+    const withFalse = { ...validConfig, AUTO_VERIFY_EMAIL: 'false' };
+    expect(parseEnv(withFalse).AUTO_VERIFY_EMAIL).toBe(false);
+
+    const withoutVar = { ...validConfig };
+    delete (withoutVar as Record<string, unknown>)['AUTO_VERIFY_EMAIL'];
+    expect(parseEnv(withoutVar).AUTO_VERIFY_EMAIL).toBe(false);
+  });
+
+  it('fails startup if NODE_ENV=production and AUTO_VERIFY_EMAIL=true', () => {
+    const prodInvalidConfig = {
+      ...validConfig,
+      NODE_ENV: 'production',
+      BCRYPT_ROUNDS: '12',
+      AUTO_VERIFY_EMAIL: 'true',
+    };
+
+    expect(() => parseEnv(prodInvalidConfig)).toThrowError(
+      /AUTO_VERIFY_EMAIL: AUTO_VERIFY_EMAIL cannot be true in production/,
+    );
+  });
+
+  it('parses TRUST_PROXY integer and defaults to 0', () => {
+    const withProxy = { ...validConfig, TRUST_PROXY: '2' };
+    expect(parseEnv(withProxy).TRUST_PROXY).toBe(2);
+
+    const withoutProxy = { ...validConfig };
+    delete (withoutProxy as Record<string, unknown>)['TRUST_PROXY'];
+    expect(parseEnv(withoutProxy).TRUST_PROXY).toBe(0);
   });
 });

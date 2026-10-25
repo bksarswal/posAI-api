@@ -1,16 +1,30 @@
 import { Router } from 'express';
 import { getOpenAPIDocument } from '../../config/openapi.js';
+import {
+  createAuthRouter,
+  type AuthRateLimitOptions,
+} from '../../modules/auth/index.js';
 
-const v1Router = Router();
+export interface V1RouterOptions {
+  rateLimits?: AuthRateLimitOptions;
+}
 
-// Serve the OpenAPI specification as JSON
-v1Router.get('/docs/openapi.json', (_req, res) => {
-  const document = getOpenAPIDocument();
-  res.json(document);
-});
+/**
+ * Builds the /api/v1 router mounting all feature modules.
+ */
+export function createV1Router(options?: V1RouterOptions): Router {
+  const router = Router();
 
-// Single location where future feature module routers are registered:
-// v1Router.use('/auth', authRouter);
-// v1Router.use('/restaurants', restaurantRouter);
+  // Serve the OpenAPI specification as JSON
+  router.get('/docs/openapi.json', (_req, res) => {
+    const document = getOpenAPIDocument();
+    res.json(document);
+  });
 
-export { v1Router };
+  // Feature module routers
+  router.use('/auth', createAuthRouter(options?.rateLimits));
+
+  return router;
+}
+
+export const v1Router = createV1Router();
