@@ -46,6 +46,34 @@ export async function findUserById(id: string): Promise<UserDocument | null> {
 }
 
 /**
+ * Finds a user by ID within the active tenant execution context, explicitly selecting +passwordHash.
+ */
+export async function findUserByIdWithPassword(
+  id: string,
+): Promise<UserDocument | null> {
+  return User.findById(id).select('+passwordHash');
+}
+
+/**
+ * Updates a user's password, sets passwordChangedAt, and resets mustChangePassword within active tenant context.
+ */
+export async function updatePassword(
+  userId: string,
+  newPasswordHash: string,
+): Promise<void> {
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        passwordHash: newPasswordHash,
+        passwordChangedAt: new Date(),
+        mustChangePassword: false,
+      },
+    },
+  );
+}
+
+/**
  * Updates the lastLoginAt timestamp for a user within the active tenant execution context.
  */
 export async function updateLastLogin(userId: string): Promise<void> {

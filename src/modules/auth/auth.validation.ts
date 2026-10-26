@@ -61,8 +61,35 @@ export const loginSuccessResponseSchema = z.object({
       name: z.string(),
       email: z.string(),
       role: z.enum(['OWNER', 'ADMIN', 'MANAGER', 'WAITER', 'CASHIER', 'CHEF']),
+      emailVerified: z.boolean().optional(),
       branchIds: z.array(z.string()),
       mustChangePassword: z.boolean(),
     }),
   }),
+});
+
+export const refreshSuccessResponseSchema = loginSuccessResponseSchema;
+
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .refine(
+        (val) => Buffer.byteLength(val, 'utf8') <= 72,
+        'Password cannot exceed 72 bytes',
+      ),
+  })
+  .strict()
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'New password must be different from current password',
+    path: ['newPassword'],
+  });
+
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const changePasswordSuccessResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
 });

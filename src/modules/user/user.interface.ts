@@ -3,6 +3,8 @@ import type { Document, Types } from 'mongoose';
 export type UserRole =
   'OWNER' | 'ADMIN' | 'MANAGER' | 'WAITER' | 'CASHIER' | 'CHEF';
 
+export type Role = UserRole;
+
 export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface IUser {

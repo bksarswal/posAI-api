@@ -9,12 +9,21 @@ import { TenantService } from '../modules/tenant/index.js';
 import type { AuthTokenPayload } from '../modules/auth/auth.types.js';
 
 /**
- * Endpoints accessible even when mustChangePassword === true.
+ * Route definition for endpoints accessible even when mustChangePassword === true.
  */
-export const PASSWORD_CHANGE_EXEMPT_ROUTES = [
-  '/api/v1/auth/change-password',
-  '/api/v1/auth/logout',
-  '/api/v1/users/me',
+export interface ExemptRoute {
+  method: string;
+  path: string;
+}
+
+/**
+ * Endpoints accessible even when mustChangePassword === true.
+ * Matched strictly on HTTP method and full path without query parameters.
+ */
+export const PASSWORD_CHANGE_EXEMPT_ROUTES: readonly ExemptRoute[] = [
+  { method: 'POST', path: '/api/v1/auth/change-password' },
+  { method: 'POST', path: '/api/v1/auth/logout' },
+  { method: 'GET', path: '/api/v1/users/me' },
 ] as const;
 
 /**
@@ -32,121 +41,130 @@ export async function authenticate(
   res: Response,
   next: NextFunction,
 ): Promise<Response | void> {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return sendError(res, {
-      statusCode: 401,
-      message: 'Authentication token missing or invalid',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  const token = authHeader.substring(7).trim();
-
-  let payload: AuthTokenPayload;
   try {
-    payload = jwt.verify(token, env.JWT_ACCESS_SECRET, {
-      algorithms: ['HS256'],
-      issuer: 'posai-api',
-    }) as AuthTokenPayload;
-  } catch (err: unknown) {
-    if (err instanceof jwt.TokenExpiredError) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return sendError(res, {
         statusCode: 401,
-        message: 'Authentication token has expired',
-        code: 'TOKEN_EXPIRED',
-      });
-    }
-
-    return sendError(res, {
-      statusCode: 401,
-      message: 'Invalid authentication token',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  if (!payload.sub || !payload.tid) {
-    return sendError(res, {
-      statusCode: 401,
-      message: 'Invalid token payload',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  let tenantObjectId: Types.ObjectId;
-  try {
-    tenantObjectId = new Types.ObjectId(payload.tid);
-  } catch {
-    return sendError(res, {
-      statusCode: 401,
-      message: 'Invalid tenant identifier in token',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  // Reload user from database inside tenant context matching token's tid.
-  // If tid in token does not match user's tenant, query returns null.
-  const user = await runWithTenant(tenantObjectId, async () => {
-    return UserService.findUserById(payload.sub);
-  });
-
-  if (!user || user.status !== 'ACTIVE') {
-    return sendError(res, {
-      statusCode: 401,
-      message: 'User account is inactive or not found',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  // Verify tenant is active
-  const tenant = await TenantService.findTenantById(payload.tid);
-  if (!tenant || tenant.status === 'SUSPENDED') {
-    return sendError(res, {
-      statusCode: 401,
-      message: 'Tenant account is suspended',
-      code: 'UNAUTHORIZED',
-    });
-  }
-
-  // Reject token if password was changed after token issuance
-  if (user.passwordChangedAt && payload.iat) {
-    const iatMs = payload.iat * 1000;
-    if (user.passwordChangedAt.getTime() > iatMs) {
-      return sendError(res, {
-        statusCode: 401,
-        message: 'Password was recently changed. Please log in again.',
+        message: 'Authentication token missing or invalid',
         code: 'UNAUTHORIZED',
       });
     }
-  }
 
-  // Enforce password change requirement
-  if (user.mustChangePassword) {
-    const path = req.originalUrl.split('?')[0];
-    const isExempt = PASSWORD_CHANGE_EXEMPT_ROUTES.some(
-      (exemptPath) => path === exemptPath,
-    );
-    if (!isExempt) {
+    const token = authHeader.substring(7).trim();
+
+    let payload: AuthTokenPayload;
+    try {
+      payload = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+        algorithms: ['HS256'],
+        issuer: 'posai-api',
+      }) as AuthTokenPayload;
+    } catch (err: unknown) {
+      if (err instanceof jwt.TokenExpiredError) {
+        return sendError(res, {
+          statusCode: 401,
+          message: 'Authentication token has expired',
+          code: 'TOKEN_EXPIRED',
+        });
+      }
+
       return sendError(res, {
-        statusCode: 403,
-        message:
-          'Password change required before accessing operational endpoints',
-        code: 'PASSWORD_CHANGE_REQUIRED',
+        statusCode: 401,
+        message: 'Invalid authentication token',
+        code: 'UNAUTHORIZED',
       });
     }
+
+    if (!payload.sub || !payload.tid) {
+      return sendError(res, {
+        statusCode: 401,
+        message: 'Invalid token payload',
+        code: 'UNAUTHORIZED',
+      });
+    }
+
+    let tenantObjectId: Types.ObjectId;
+    try {
+      tenantObjectId = new Types.ObjectId(payload.tid);
+    } catch {
+      return sendError(res, {
+        statusCode: 401,
+        message: 'Invalid tenant identifier in token',
+        code: 'UNAUTHORIZED',
+      });
+    }
+
+    // Reload user from database inside tenant context matching token's tid.
+    // If tid in token does not match user's tenant, query returns null.
+    const user = await runWithTenant(tenantObjectId, async () => {
+      return UserService.findUserById(payload.sub);
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      return sendError(res, {
+        statusCode: 401,
+        message: 'User account is inactive or not found',
+        code: 'UNAUTHORIZED',
+      });
+    }
+
+    // Verify tenant is active
+    const tenant = await TenantService.findTenantById(payload.tid);
+    if (!tenant || tenant.status === 'SUSPENDED') {
+      return sendError(res, {
+        statusCode: 401,
+        message: 'Tenant account is suspended',
+        code: 'UNAUTHORIZED',
+      });
+    }
+
+    // Reject token if password was changed after token issuance (compared in whole seconds)
+    if (user.passwordChangedAt && payload.iat) {
+      const passwordChangedSeconds = Math.floor(
+        user.passwordChangedAt.getTime() / 1000,
+      );
+      if (passwordChangedSeconds > payload.iat) {
+        return sendError(res, {
+          statusCode: 401,
+          message: 'Password was recently changed. Please log in again.',
+          code: 'TOKEN_REVOKED',
+        });
+      }
+    }
+
+    // Enforce password change requirement
+    if (user.mustChangePassword) {
+      const currentMethod = req.method.toUpperCase();
+      const currentPath = (req.originalUrl || req.url).split('?')[0];
+      const isExempt = PASSWORD_CHANGE_EXEMPT_ROUTES.some(
+        (exempt) =>
+          exempt.method === currentMethod && exempt.path === currentPath,
+      );
+      if (!isExempt) {
+        return sendError(res, {
+          statusCode: 403,
+          message:
+            'Password change required before accessing operational endpoints',
+          code: 'PASSWORD_CHANGE_REQUIRED',
+        });
+      }
+    }
+
+    // Populate req.auth using authoritative database role
+    req.auth = {
+      userId: user._id.toString(),
+      tenantId: user.tenantId.toString(),
+      role: user.role,
+      branchIds: user.branchIds || [],
+    };
+
+    // Call next() INSIDE runWithTenant so all downstream handlers operate within tenant scope.
+    // Awaiting guarantees no unhandled rejection or floating promise escapes this middleware.
+    return await runWithTenant(user.tenantId, async () => {
+      next();
+    });
+  } catch (err) {
+    next(err);
   }
-
-  // Populate req.auth using authoritative database role
-  req.auth = {
-    userId: user._id.toString(),
-    tenantId: user.tenantId.toString(),
-    role: user.role,
-    branchIds: user.branchIds || [],
-  };
-
-  // Call next() INSIDE runWithTenant so all downstream handlers operate within tenant scope
-  return runWithTenant(user.tenantId, async () => {
-    next();
-  });
 }

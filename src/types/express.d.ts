@@ -1,10 +1,10 @@
 import type { Types } from 'mongoose';
-import type { UserRole } from '../modules/user/user.interface.js';
+import type { Role } from '../modules/user/index.js';
 
 export interface AuthContext {
   userId: string;
   tenantId: string;
-  role: UserRole;
+  role: Role;
   branchIds: Types.ObjectId[];
 }
 

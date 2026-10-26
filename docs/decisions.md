@@ -124,3 +124,13 @@ This document records architectural, technical, and operational decisions agreed
 
 15. **Per-Request Database Reload Trade-Off**:
     - Reloading the user on every request guarantees immediate enforcement when a user is deactivated, when a tenant is suspended, when a password is changed, or when staff permissions are modified. While this incurs one indexed read per authenticated request, primary key lookups against MongoDB's working set resolve in sub-millisecond time, avoiding the complexity of distributed token revocation blocklists in early sprints.
+
+16. **Refresh Token Rotation Design (Atomic Claim, Grace Window, Sliding Expiry & Family Revocation)**:
+    - **Atomic Claim**: Token rotation is executed inside a MongoDB transaction (`session.withTransaction`) using `findOneAndUpdate({ tokenHash, rotatedAt: null, revokedAt: null, expiresAt: { $gt: now } }, { $set: { rotatedAt: now } }, { session, returnDocument: 'before' })`. Inside the same transaction, a new token is created with the same `familyId` and sliding 7-day expiry (`REFRESH_TOKEN_TTL_DAYS`).
+    - **Grace Window & Cookie Preservation**: If a token was already rotated within `REFRESH_GRACE_SECONDS` (10s), the system returns `401 REFRESH_TOKEN_ROTATED` without revoking the family and without clearing the cookie (another tab may have just set the new cookie, so clearing it would prematurely invalidate the active session).
+    - **Reuse Detection**: If a token is presented after the 10-second grace window, reuse is detected. All tokens belonging to the family are immediately revoked, a warn-level security audit log is emitted, the cookie is cleared, and `401 REFRESH_TOKEN_REUSED` is returned.
+    - **Sliding Expiry**: Each successful rotation yields a fresh 7-day TTL (`REFRESH_TOKEN_TTL_DAYS`), keeping active sessions authenticated without requiring periodic manual re-logins.
+
+17. **Change Password Security & Universal Session Invalidation**:
+    - **400 for Incorrect Current Password**: `POST /api/v1/auth/change-password` returns `400 INVALID_CURRENT_PASSWORD` rather than `401`. Returning 401 would cause the frontend client's authentication interceptor to treat the error as an expired session and initiate an automated refresh cycle, resulting in confusing loops.
+    - **Global Device Logout**: A successful password change sets `passwordChangedAt = now` and `mustChangePassword = false`, revoking ALL refresh token families belonging to the user across all devices (`RefreshTokenService.revokeAllForUser`). Existing access tokens are rejected on their next request with `401 TOKEN_REVOKED` via the `passwordChangedAt` timestamp check in `authenticate`.

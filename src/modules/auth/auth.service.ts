@@ -10,6 +10,7 @@ import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { generateToken, hashToken } from '../../utils/token.js';
 import { runWithTenant } from '../../utils/tenantContext.js';
 import { AppError } from '../../utils/appError.js';
+import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 import type { SignupInput, LoginInput } from './auth.validation.js';
 import type { SignupResponseData, LoginResponseUser } from './auth.types.js';
@@ -277,4 +278,163 @@ export async function logout(rawRefreshToken?: string): Promise<void> {
       await RefreshTokenService.revokeFamily(existing.familyId);
     }
   }
+}
+
+/**
+ * Handles refresh token rotation:
+ * 1. Checks if raw token is provided.
+ * 2. Invokes atomic rotateToken transaction.
+ * 3. Handles discriminated status (rotated | grace | reused | invalid) AFTER transaction commits.
+ * 4. Reloads user and tenant inside tenant context and verifies active / emailVerified status.
+ * 5. Generates new access token with DB role.
+ */
+export async function refreshSession(
+  rawRefreshToken: string | undefined,
+  context: { ip?: string; userAgent?: string },
+): Promise<{
+  accessToken: string;
+  rawRefreshToken: string;
+  user: LoginResponseUser;
+}> {
+  if (!rawRefreshToken || typeof rawRefreshToken !== 'string') {
+    throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
+  }
+
+  const tokenHash = hashToken(rawRefreshToken);
+  const result = await RefreshTokenService.rotateToken({
+    tokenHash,
+    ip: context.ip,
+    userAgent: context.userAgent,
+  });
+
+  if (result.status === 'invalid') {
+    throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
+  }
+
+  if (result.status === 'grace') {
+    // Replay within REFRESH_GRACE_SECONDS: Do NOT revoke family, do NOT clear cookie
+    throw new AppError(
+      'Refresh token was already rotated within grace period',
+      401,
+      'REFRESH_TOKEN_ROTATED',
+    );
+  }
+
+  if (result.status === 'reused') {
+    // Replay after grace window: Revoke entire family, log security event
+    logger.warn(
+      {
+        userId: result.token.userId.toString(),
+        familyId: result.token.familyId,
+        ip: context.ip,
+      },
+      'Refresh token reuse detected: entire token family revoked',
+    );
+    await RefreshTokenService.revokeFamily(result.token.familyId);
+    throw new AppError(
+      'Refresh token reuse detected',
+      401,
+      'REFRESH_TOKEN_REUSED',
+    );
+  }
+
+  // result.status === 'rotated'
+  const { claimedToken, newRawToken } = result;
+
+  // Step 5: Reload user inside runWithTenant(claimedToken.tenantId)
+  const user = await runWithTenant(claimedToken.tenantId, async () => {
+    return UserService.findUserById(claimedToken.userId.toString());
+  });
+
+  const tenant = await TenantService.findTenantById(
+    claimedToken.tenantId.toString(),
+  );
+
+  if (
+    !user ||
+    user.status !== 'ACTIVE' ||
+    !user.emailVerified ||
+    !tenant ||
+    tenant.status !== 'ACTIVE'
+  ) {
+    await RefreshTokenService.revokeFamily(claimedToken.familyId);
+    throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
+  }
+
+  // Step 6: Generate access token using DB role
+  const accessToken = jwt.sign(
+    {
+      sub: user._id.toString(),
+      tid: user.tenantId.toString(),
+      role: user.role,
+    },
+    env.JWT_ACCESS_SECRET,
+    {
+      algorithm: 'HS256',
+      issuer: 'posai-api',
+      expiresIn: `${env.ACCESS_TOKEN_TTL_MINUTES}m`,
+    },
+  );
+
+  return {
+    accessToken,
+    rawRefreshToken: newRawToken,
+    user: {
+      id: user._id.toString(),
+      tenantId: user.tenantId.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      branchIds: (user.branchIds || []).map((b) => b.toString()),
+      mustChangePassword: user.mustChangePassword ?? false,
+    },
+  };
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+/**
+ * Handles password change for authenticated users:
+ * 1. Verifies current password against stored hash.
+ * 2. Hashes new password.
+ * 3. Updates passwordHash, passwordChangedAt = now, mustChangePassword = false via UserService.
+ * 4. Revokes all refresh token families for this user across all tenants.
+ */
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+): Promise<void> {
+  const user = await UserService.findUserByIdWithPassword(userId);
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  const isCurrentValid = await verifyPassword(
+    input.currentPassword,
+    user.passwordHash,
+  );
+  if (!isCurrentValid) {
+    throw new AppError(
+      'Current password is incorrect',
+      400,
+      'INVALID_CURRENT_PASSWORD',
+    );
+  }
+
+  if (input.currentPassword === input.newPassword) {
+    throw new AppError(
+      'New password must be different from current password',
+      400,
+      'VALIDATION_ERROR',
+    );
+  }
+
+  const newPasswordHash = await hashPassword(input.newPassword);
+  await UserService.updatePassword(userId, newPasswordHash);
+
+  // Revoke all refresh token families for this user across all tenants
+  await RefreshTokenService.revokeAllForUser(userId);
 }

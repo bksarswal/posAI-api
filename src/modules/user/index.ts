@@ -4,5 +4,6 @@ export type {
   IUser,
   UserDocument,
   UserRole,
+  Role,
   UserStatus,
 } from './user.interface.js';

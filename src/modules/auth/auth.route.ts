@@ -5,8 +5,12 @@ import {
   signupSuccessResponseSchema,
   loginSchema,
   loginSuccessResponseSchema,
+  refreshSuccessResponseSchema,
+  changePasswordSchema,
+  changePasswordSuccessResponseSchema,
 } from './auth.validation.js';
 import { validateBody } from '../../middleware/validate.js';
+import { authenticate } from '../../middleware/authenticate.js';
 import {
   createRateLimiter,
   ipKeyGenerator,
@@ -22,6 +26,8 @@ export interface AuthRateLimitOptions {
   signupIpEmail?: { windowMs?: number; max?: number };
   loginIp?: { windowMs?: number; max?: number };
   loginIpEmail?: { windowMs?: number; max?: number };
+  refreshIp?: { windowMs?: number; max?: number };
+  changePassword?: { windowMs?: number; max?: number };
 }
 
 // Register OpenAPI path for POST /api/v1/auth/signup
@@ -160,6 +166,97 @@ openApiRegistry.registerPath({
   },
 });
 
+// Register OpenAPI path for POST /api/v1/auth/refresh
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/refresh',
+  summary: 'Rotate refresh token',
+  description:
+    'Rotates refresh token atomically, issues a new access token, and sets a new HttpOnly refresh cookie.',
+  tags: ['Auth'],
+  responses: {
+    200: {
+      description: 'Token refreshed successfully',
+      content: {
+        'application/json': {
+          schema: refreshSuccessResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Invalid, expired, or reused refresh token',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+// Register OpenAPI path for POST /api/v1/auth/change-password
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/change-password',
+  summary: 'Change password',
+  description:
+    'Allows authenticated user to change password. Invalidates all active refresh token families across all devices.',
+  tags: ['Auth'],
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      description: 'Current and new password',
+      content: {
+        'application/json': {
+          schema: changePasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Password changed successfully',
+      content: {
+        'application/json': {
+          schema: changePasswordSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid current password or validation failure',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: 'Unauthorized or token invalid',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 /**
  * Builds the Auth router with configured rate limiters.
  */
@@ -224,6 +321,26 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
       'Too many login attempts for this account. Please try again later.',
   });
 
+  // 3. Refresh rate limiter: 60/15m per IP
+  const refreshIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.refreshIp?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.refreshIp?.max ?? 60,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message: 'Too many refresh attempts from this IP. Please try again later.',
+  });
+
+  // 4. Change password rate limiter: 5/15m per IP+userId
+  const changePasswordLimiter = createRateLimiter({
+    windowMs: rateLimits?.changePassword?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.changePassword?.max ?? 5,
+    keyGenerator: (req) => {
+      const ip = ipKeyGenerator(req.ip ?? '127.0.0.1');
+      const userId = req.auth?.userId || 'anonymous';
+      return `${ip}:${userId}`;
+    },
+    message: 'Too many password change attempts. Please try again later.',
+  });
+
   router.post(
     '/signup',
     signupIpLimiter,
@@ -241,6 +358,16 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
   );
 
   router.post('/logout', AuthController.logout);
+
+  router.post('/refresh', refreshIpLimiter, AuthController.refresh);
+
+  router.post(
+    '/change-password',
+    authenticate,
+    changePasswordLimiter,
+    validateBody(changePasswordSchema),
+    AuthController.changePassword,
+  );
 
   return router;
 }
