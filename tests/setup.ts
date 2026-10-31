@@ -12,4 +12,5 @@ process.env.CLIENT_URL = 'http://localhost:3000';
 process.env.BCRYPT_ROUNDS = '4';
 process.env.AUTO_VERIFY_EMAIL = 'false';
 process.env.TRUST_PROXY = '0';
+process.env.EMAIL_PROVIDER = 'log';
 process.env.LOG_LEVEL = 'silent';

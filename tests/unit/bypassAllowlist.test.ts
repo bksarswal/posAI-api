@@ -14,6 +14,8 @@ describe('Tenant Bypass Static Analysis Guard', () => {
     path.normalize('src/modules/user/user.service.ts'),
     // refreshToken.service.ts is allowlisted for global token lookups during auth/logout/refresh
     path.normalize('src/modules/auth/refreshToken.service.ts'),
+    // authToken.service.ts is allowlisted for global token lookups during email verification and password reset
+    path.normalize('src/modules/auth/authToken.service.ts'),
   ]);
 
   function getAllTypeScriptFiles(dir: string): string[] {

@@ -8,6 +8,11 @@ import {
   refreshSuccessResponseSchema,
   changePasswordSchema,
   changePasswordSuccessResponseSchema,
+  authGenericSuccessResponseSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from './auth.validation.js';
 import { validateBody } from '../../middleware/validate.js';
 import { authenticate } from '../../middleware/authenticate.js';
@@ -28,6 +33,12 @@ export interface AuthRateLimitOptions {
   loginIpEmail?: { windowMs?: number; max?: number };
   refreshIp?: { windowMs?: number; max?: number };
   changePassword?: { windowMs?: number; max?: number };
+  verifyEmailIp?: { windowMs?: number; max?: number };
+  resendVerificationIp?: { windowMs?: number; max?: number };
+  resendVerificationIpEmail?: { windowMs?: number; max?: number };
+  forgotPasswordIp?: { windowMs?: number; max?: number };
+  forgotPasswordIpEmail?: { windowMs?: number; max?: number };
+  resetPasswordIp?: { windowMs?: number; max?: number };
 }
 
 // Register OpenAPI path for POST /api/v1/auth/signup
@@ -257,6 +268,190 @@ openApiRegistry.registerPath({
   },
 });
 
+// Register OpenAPI path for POST /api/v1/auth/verify-email
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/verify-email',
+  summary: 'Verify user email',
+  description:
+    'Atomically verifies user email address using single-use verification token.',
+  tags: ['Auth'],
+  request: {
+    body: {
+      description: 'Email verification token',
+      content: {
+        'application/json': {
+          schema: verifyEmailSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Email verified successfully',
+      content: {
+        'application/json': {
+          schema: authGenericSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid, used, or expired verification token',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+// Register OpenAPI path for POST /api/v1/auth/resend-verification
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/resend-verification',
+  summary: 'Resend email verification',
+  description:
+    'Sends a new email verification link if the account exists and is unverified. 60-second cooldown per user.',
+  tags: ['Auth'],
+  request: {
+    body: {
+      description: 'User email address',
+      content: {
+        'application/json': {
+          schema: resendVerificationSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Generic success message regardless of account existence',
+      content: {
+        'application/json': {
+          schema: authGenericSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation failure',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+// Register OpenAPI path for POST /api/v1/auth/forgot-password
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/forgot-password',
+  summary: 'Request password reset',
+  description:
+    'Sends password reset link if account exists and is ACTIVE. 60-second cooldown per user.',
+  tags: ['Auth'],
+  request: {
+    body: {
+      description: 'User email address',
+      content: {
+        'application/json': {
+          schema: forgotPasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Generic success message regardless of account existence',
+      content: {
+        'application/json': {
+          schema: authGenericSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation failure',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+// Register OpenAPI path for POST /api/v1/auth/reset-password
+openApiRegistry.registerPath({
+  method: 'post',
+  path: '/api/v1/auth/reset-password',
+  summary: 'Reset password with token',
+  description:
+    'Resets password using single-use reset token, updates email verification status, and invalidates all active sessions.',
+  tags: ['Auth'],
+  request: {
+    body: {
+      description: 'Reset token and new password',
+      content: {
+        'application/json': {
+          schema: resetPasswordSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Password reset successfully',
+      content: {
+        'application/json': {
+          schema: authGenericSuccessResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Invalid, used, or expired reset token, or validation error',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    429: {
+      description: 'Rate limit exceeded',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
 /**
  * Builds the Auth router with configured rate limiters.
  */
@@ -341,6 +536,84 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
     message: 'Too many password change attempts. Please try again later.',
   });
 
+  // 5. Verify email rate limiter: 10/15m per IP
+  const verifyEmailIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.verifyEmailIp?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.verifyEmailIp?.max ?? 10,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message:
+      'Too many email verification attempts from this IP. Please try again later.',
+  });
+
+  // 6. Resend verification rate limiters: 20/hr per IP, 3/hr per IP+email
+  const resendVerificationIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.resendVerificationIp?.windowMs ?? 60 * 60 * 1000,
+    max: rateLimits?.resendVerificationIp?.max ?? 20,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message:
+      'Too many resend verification attempts from this IP. Please try again later.',
+  });
+
+  const resendVerificationIpEmailLimiter = createRateLimiter({
+    windowMs: rateLimits?.resendVerificationIpEmail?.windowMs ?? 60 * 60 * 1000,
+    max: rateLimits?.resendVerificationIpEmail?.max ?? 3,
+    keyGenerator: (req) => {
+      const ip = ipKeyGenerator(req.ip ?? '127.0.0.1');
+      let email = '';
+      if (
+        typeof req.body === 'object' &&
+        req.body !== null &&
+        typeof (req.body as Record<string, unknown>)['email'] === 'string'
+      ) {
+        email = ((req.body as Record<string, unknown>)['email'] as string)
+          .trim()
+          .toLowerCase();
+      }
+      return `${ip}:${email}`;
+    },
+    message:
+      'Too many resend verification attempts for this email address. Please try again later.',
+  });
+
+  // 7. Forgot password rate limiters: 20/hr per IP, 3/hr per IP+email
+  const forgotPasswordIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.forgotPasswordIp?.windowMs ?? 60 * 60 * 1000,
+    max: rateLimits?.forgotPasswordIp?.max ?? 20,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message:
+      'Too many password reset requests from this IP. Please try again later.',
+  });
+
+  const forgotPasswordIpEmailLimiter = createRateLimiter({
+    windowMs: rateLimits?.forgotPasswordIpEmail?.windowMs ?? 60 * 60 * 1000,
+    max: rateLimits?.forgotPasswordIpEmail?.max ?? 3,
+    keyGenerator: (req) => {
+      const ip = ipKeyGenerator(req.ip ?? '127.0.0.1');
+      let email = '';
+      if (
+        typeof req.body === 'object' &&
+        req.body !== null &&
+        typeof (req.body as Record<string, unknown>)['email'] === 'string'
+      ) {
+        email = ((req.body as Record<string, unknown>)['email'] as string)
+          .trim()
+          .toLowerCase();
+      }
+      return `${ip}:${email}`;
+    },
+    message:
+      'Too many password reset requests for this email address. Please try again later.',
+  });
+
+  // 8. Reset password rate limiter: 10/15m per IP
+  const resetPasswordIpLimiter = createRateLimiter({
+    windowMs: rateLimits?.resetPasswordIp?.windowMs ?? 15 * 60 * 1000,
+    max: rateLimits?.resetPasswordIp?.max ?? 10,
+    keyGenerator: (req) => ipKeyGenerator(req.ip ?? '127.0.0.1'),
+    message:
+      'Too many password reset attempts from this IP. Please try again later.',
+  });
+
   router.post(
     '/signup',
     signupIpLimiter,
@@ -367,6 +640,36 @@ export function createAuthRouter(rateLimits?: AuthRateLimitOptions): Router {
     changePasswordLimiter,
     validateBody(changePasswordSchema),
     AuthController.changePassword,
+  );
+
+  router.post(
+    '/verify-email',
+    verifyEmailIpLimiter,
+    validateBody(verifyEmailSchema),
+    AuthController.verifyEmail,
+  );
+
+  router.post(
+    '/resend-verification',
+    resendVerificationIpLimiter,
+    resendVerificationIpEmailLimiter,
+    validateBody(resendVerificationSchema),
+    AuthController.resendVerification,
+  );
+
+  router.post(
+    '/forgot-password',
+    forgotPasswordIpLimiter,
+    forgotPasswordIpEmailLimiter,
+    validateBody(forgotPasswordSchema),
+    AuthController.forgotPassword,
+  );
+
+  router.post(
+    '/reset-password',
+    resetPasswordIpLimiter,
+    validateBody(resetPasswordSchema),
+    AuthController.resetPassword,
   );
 
   return router;

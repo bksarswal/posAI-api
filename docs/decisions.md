@@ -134,3 +134,32 @@ This document records architectural, technical, and operational decisions agreed
 17. **Change Password Security & Universal Session Invalidation**:
     - **400 for Incorrect Current Password**: `POST /api/v1/auth/change-password` returns `400 INVALID_CURRENT_PASSWORD` rather than `401`. Returning 401 would cause the frontend client's authentication interceptor to treat the error as an expired session and initiate an automated refresh cycle, resulting in confusing loops.
     - **Global Device Logout**: A successful password change sets `passwordChangedAt = now` and `mustChangePassword = false`, revoking ALL refresh token families belonging to the user across all devices (`RefreshTokenService.revokeAllForUser`). Existing access tokens are rejected on their next request with `401 TOKEN_REVOKED` via the `passwordChangedAt` timestamp check in `authenticate`.
+
+---
+
+## 18. Email Verification, Password Reset Tokens & Anti-Enumeration Protections
+- **AuthToken Design (Single-Use & Hashed Storage)**:
+  - Authentication tokens for email verification and password reset (`AuthToken`) store only a cryptographic SHA-256 hash (`tokenHash`) of a cryptographically secure random token (`generateToken()`: 32 bytes base64url). Raw tokens are delivered solely via email links and are never retained in database storage.
+  - Tokens are single-use. Verification and reset operations claim tokens via atomic `findOneAndUpdate` queries ensuring that concurrent redemption attempts cannot succeed more than once.
+  - MongoDB TTL indexes automatically clean up expired tokens (`expiresAt: 1` with `expireAfterSeconds: 0`), while application-layer checks guarantee that lazy MongoDB index cleanup never accepts expired tokens (`expiresAt > now`).
+- **Enumeration Mitigation & Uniform Generic Responses**:
+  - Both `POST /api/v1/auth/resend-verification` and `POST /api/v1/auth/forgot-password` always respond with an identical generic `200 OK` message (`{ success: true, data: { message: "If an account exists with this email, instructions have been sent." } }`), regardless of whether the email exists, is deactivated, or is already verified.
+  - Email dispatch is dispatched asynchronously (un-awaited promise with error logging) to prevent side-channel timing attacks leaking email existence via SMTP network latency.
+- **60-Second Cooldown Throttling**:
+  - A strict 60-second cooldown is enforced per user/email for both verification resends and password reset requests (`AUTH_TOKEN_RESEND_COOLDOWN_SECONDS = 60`). If a token was created within the last 60 seconds, no new token is created and no email is sent, preventing inbox flooding and SMTP resource exhaustion while still returning the uniform generic `200 OK`.
+- **Environment Safety (Log Email Provider Blocked in Production)**:
+  - The development `LogEmailProvider` prints full email contents including verification/reset links directly into the structured console logs for zero-setup local testing.
+  - Startup fails fatally in production if `EMAIL_PROVIDER="log"`, preventing accidental credential and link leakage in production log streams.
+- **Mailbox Ownership Verification via Password Reset**:
+  - Successfully completing a password reset via `POST /api/v1/auth/reset-password` automatically marks `emailVerified = true`. Accessing a one-time reset token delivered to the registered email address constitutes definitive proof of mailbox control.
+  - Password reset executes within a single MongoDB transaction that atomically claims the token, updates the password hash, updates `passwordChangedAt`, sets `mustChangePassword = false`, marks `emailVerified = true`, and revokes all active refresh token families.
+- **SMTP Provider Pilot Requirement**:
+  - `SmtpEmailProvider` has not been tested against a real SMTP server; test it with the chosen email service before the pilot.
+
+---
+
+## 19. Branch Lifecycle: Soft Deactivation Over Deletion
+- **Decision**: Branches are never physically deleted from the database. There is no `DELETE /branches` endpoint.
+- **Deactivation**: Branches are deactivated by setting `status: 'INACTIVE'` via `PATCH /api/v1/branches/:id`.
+- **Main Branch Protection**: The main branch of a tenant (`isMain: true`) cannot be deactivated; attempting to set it to `INACTIVE` returns `409 CANNOT_DEACTIVATE_MAIN_BRANCH`.
+- **Context**: Preserves referential integrity and audit trails for historical orders, invoices, inventory movements, staff audit logs, and analytics tied to the branch.

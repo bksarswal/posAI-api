@@ -9,6 +9,7 @@ import { Restaurant } from '../../src/modules/restaurant/restaurant.model.js';
 import { Branch } from '../../src/modules/branch/branch.model.js';
 import { User } from '../../src/modules/user/user.model.js';
 import { RefreshToken } from '../../src/modules/auth/refreshToken.model.js';
+import { AuthToken } from '../../src/modules/auth/authToken.model.js';
 import { runWithTenant } from '../../src/utils/tenantContext.js';
 import { withGlobalScope } from '../../src/utils/tenantBypass.js';
 import { TenantScopingError } from '../../src/utils/appError.js';
@@ -33,6 +34,7 @@ describe('Tenant, Restaurant, Branch, User, and RefreshToken Models & Indexes', 
     await Branch.init();
     await User.init();
     await RefreshToken.init();
+    await AuthToken.init();
   }, 60000);
 
   afterAll(async () => {
@@ -42,6 +44,7 @@ describe('Tenant, Restaurant, Branch, User, and RefreshToken Models & Indexes', 
 
   beforeEach(async () => {
     await withGlobalScope(async () => {
+      await AuthToken.deleteMany({});
       await RefreshToken.deleteMany({});
       await User.deleteMany({});
       await Branch.deleteMany({});

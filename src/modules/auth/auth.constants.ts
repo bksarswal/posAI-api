@@ -8,6 +8,17 @@ import { env } from '../../config/env.js';
 export const REFRESH_GRACE_SECONDS = 10;
 
 /**
+ * Token validity windows.
+ */
+export const VERIFICATION_TOKEN_TTL_HOURS = 24;
+export const PASSWORD_RESET_TOKEN_TTL_HOURS = 1;
+
+/**
+ * Cooldown period in seconds before a new verification or reset email can be requested.
+ */
+export const AUTH_TOKEN_RESEND_COOLDOWN_SECONDS = 60;
+
+/**
  * Builds standard HttpOnly cookie options for refresh tokens.
  * Secure flag is strictly true ONLY in production environments.
  */

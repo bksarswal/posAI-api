@@ -183,6 +183,1745 @@
         }
       }
     },
+    "/api/v1/restaurant": {
+      "post": {
+        "summary": "Create tenant restaurant",
+        "description": "Creates the single restaurant profile for the tenant. OWNER only. Returns 409 if a restaurant already exists.",
+        "tags": [
+          "Restaurant"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "description": "Restaurant creation payload",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "gstin": {
+                    "type": "string"
+                  },
+                  "fssai": {
+                    "type": "string",
+                    "pattern": "^\\d{14}$"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line2": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pincode": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{5}$"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "city",
+                      "state",
+                      "pincode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "logoUrl": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "name",
+                  "phone",
+                  "email",
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Restaurant created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "restaurant": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "gstin": {
+                                  "type": "string"
+                                },
+                                "fssai": {
+                                  "type": "string"
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "logoUrl": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "name",
+                                "phone",
+                                "email",
+                                "address",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "restaurant"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or unexpected fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - OWNER role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Restaurant already exists for this tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Get tenant restaurant",
+        "description": "Retrieves the restaurant profile for the active tenant. Accessible by any authenticated role. Returns 404 when none exists.",
+        "tags": [
+          "Restaurant"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Restaurant retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "restaurant": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "gstin": {
+                                  "type": "string"
+                                },
+                                "fssai": {
+                                  "type": "string"
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "logoUrl": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "name",
+                                "phone",
+                                "email",
+                                "address",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "restaurant"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Restaurant not found for this tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update tenant restaurant",
+        "description": "Updates restaurant profile fields. OWNER and ADMIN roles only. Empty body returns 400.",
+        "tags": [
+          "Restaurant"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "description": "Restaurant update payload (strict partial, non-empty)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "gstin": {
+                    "type": "string"
+                  },
+                  "fssai": {
+                    "type": "string",
+                    "pattern": "^\\d{14}$"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line2": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pincode": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{5}$"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "city",
+                      "state",
+                      "pincode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "logoUrl": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "format": "uri"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Restaurant updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "restaurant": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "gstin": {
+                                  "type": "string"
+                                },
+                                "fssai": {
+                                  "type": "string"
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "logoUrl": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "name",
+                                "phone",
+                                "email",
+                                "address",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "restaurant"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or empty body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - OWNER or ADMIN role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Restaurant not found for this tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/branches": {
+      "post": {
+        "summary": "Create a new branch",
+        "description": "Creates a new branch for the tenant. OWNER and ADMIN only. Requires an existing restaurant. First branch is automatically assigned isMain=true.",
+        "tags": [
+          "Branches"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "description": "Branch creation payload",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line2": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pincode": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{5}$"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "city",
+                      "state",
+                      "pincode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "default": "Asia/Kolkata"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "enum": [
+                      "INR"
+                    ],
+                    "default": "INR"
+                  }
+                },
+                "required": [
+                  "name",
+                  "code",
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Branch created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "branch": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "restaurantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "string"
+                                },
+                                "currency": {
+                                  "type": "string"
+                                },
+                                "isMain": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ACTIVE",
+                                    "INACTIVE"
+                                  ]
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "restaurantId",
+                                "name",
+                                "code",
+                                "address",
+                                "timezone",
+                                "currency",
+                                "isMain",
+                                "status",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "branch"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or forbidden fields (isMain, etc.)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - OWNER or ADMIN role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Restaurant required or duplicate branch code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List accessible branches",
+        "description": "Retrieves branches for the active tenant. OWNER and ADMIN see all branches; other roles see only assigned branches.",
+        "tags": [
+          "Branches"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branches retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "branches": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "tenantId": {
+                                    "type": "string"
+                                  },
+                                  "restaurantId": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "object",
+                                    "properties": {
+                                      "line1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "line2": {
+                                        "type": "string"
+                                      },
+                                      "city": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "state": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "pincode": {
+                                        "type": "string",
+                                        "pattern": "^[1-9][0-9]{5}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "line1",
+                                      "city",
+                                      "state",
+                                      "pincode"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "phone": {
+                                    "type": "string"
+                                  },
+                                  "timezone": {
+                                    "type": "string"
+                                  },
+                                  "currency": {
+                                    "type": "string"
+                                  },
+                                  "isMain": {
+                                    "type": "boolean"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ACTIVE",
+                                      "INACTIVE"
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "type": "string"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "tenantId",
+                                  "restaurantId",
+                                  "name",
+                                  "code",
+                                  "address",
+                                  "timezone",
+                                  "currency",
+                                  "isMain",
+                                  "status",
+                                  "createdAt",
+                                  "updatedAt"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "branches"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/branches/{id}": {
+      "get": {
+        "summary": "Get branch by ID",
+        "description": "Retrieves a branch by ID. Returns 404 if the branch does not exist, belongs to another tenant, or the user lacks access.",
+        "tags": [
+          "Branches"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Branch MongoDB ObjectId"
+            },
+            "required": true,
+            "description": "Branch MongoDB ObjectId",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branch retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "branch": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "restaurantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "string"
+                                },
+                                "currency": {
+                                  "type": "string"
+                                },
+                                "isMain": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ACTIVE",
+                                    "INACTIVE"
+                                  ]
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "restaurantId",
+                                "name",
+                                "code",
+                                "address",
+                                "timezone",
+                                "currency",
+                                "isMain",
+                                "status",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "branch"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid ObjectId parameter (INVALID_ID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found (BRANCH_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update branch by ID",
+        "description": "Updates editable branch fields. OWNER and ADMIN only. Cannot deactivate main branch (409 CANNOT_DEACTIVATE_MAIN_BRANCH).",
+        "tags": [
+          "Branches"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Branch MongoDB ObjectId"
+            },
+            "required": true,
+            "description": "Branch MongoDB ObjectId",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "description": "Branch update payload (strict partial, non-empty)",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100
+                  },
+                  "address": {
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "line2": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "state": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "pincode": {
+                        "type": "string",
+                        "pattern": "^[1-9][0-9]{5}$"
+                      }
+                    },
+                    "required": [
+                      "line1",
+                      "city",
+                      "state",
+                      "pincode"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "ACTIVE",
+                      "INACTIVE"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Branch updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "branch": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "restaurantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "string"
+                                },
+                                "currency": {
+                                  "type": "string"
+                                },
+                                "isMain": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ACTIVE",
+                                    "INACTIVE"
+                                  ]
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "restaurantId",
+                                "name",
+                                "code",
+                                "address",
+                                "timezone",
+                                "currency",
+                                "isMain",
+                                "status",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "branch"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed, invalid ID, or unmodifiable fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - OWNER or ADMIN role required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found (BRANCH_NOT_FOUND)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Cannot deactivate main branch (CANNOT_DEACTIVATE_MAIN_BRANCH)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me": {
+      "get": {
+        "summary": "Get current user and onboarding context",
+        "description": "Retrieves user profile, tenant info, restaurant profile, and accessible branches. Exempt from mustChangePassword gate. Accessible by all authenticated roles.",
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile and onboarding context retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "user": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string",
+                                  "format": "email"
+                                },
+                                "role": {
+                                  "type": "string",
+                                  "enum": [
+                                    "OWNER",
+                                    "ADMIN",
+                                    "MANAGER",
+                                    "WAITER",
+                                    "CASHIER",
+                                    "CHEF"
+                                  ]
+                                },
+                                "branchIds": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "emailVerified": {
+                                  "type": "boolean"
+                                },
+                                "mustChangePassword": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "name",
+                                "email",
+                                "role",
+                                "branchIds",
+                                "emailVerified",
+                                "mustChangePassword"
+                              ]
+                            },
+                            "tenant": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "slug": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "slug",
+                                "status"
+                              ]
+                            },
+                            "restaurant": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "tenantId": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "gstin": {
+                                  "type": "string"
+                                },
+                                "fssai": {
+                                  "type": "string"
+                                },
+                                "phone": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "address": {
+                                  "type": "object",
+                                  "properties": {
+                                    "line1": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "line2": {
+                                      "type": "string"
+                                    },
+                                    "city": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "state": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "pincode": {
+                                      "type": "string",
+                                      "pattern": "^[1-9][0-9]{5}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "line1",
+                                    "city",
+                                    "state",
+                                    "pincode"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "logoUrl": {
+                                  "type": "string"
+                                },
+                                "createdAt": {
+                                  "type": "string"
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "tenantId",
+                                "name",
+                                "phone",
+                                "email",
+                                "address",
+                                "createdAt",
+                                "updatedAt"
+                              ]
+                            },
+                            "branches": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "tenantId": {
+                                    "type": "string"
+                                  },
+                                  "restaurantId": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "code": {
+                                    "type": "string"
+                                  },
+                                  "address": {
+                                    "type": "object",
+                                    "properties": {
+                                      "line1": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "line2": {
+                                        "type": "string"
+                                      },
+                                      "city": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "state": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "pincode": {
+                                        "type": "string",
+                                        "pattern": "^[1-9][0-9]{5}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "line1",
+                                      "city",
+                                      "state",
+                                      "pincode"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "phone": {
+                                    "type": "string"
+                                  },
+                                  "timezone": {
+                                    "type": "string"
+                                  },
+                                  "currency": {
+                                    "type": "string"
+                                  },
+                                  "isMain": {
+                                    "type": "boolean"
+                                  },
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ACTIVE",
+                                      "INACTIVE"
+                                    ]
+                                  },
+                                  "createdAt": {
+                                    "type": "string"
+                                  },
+                                  "updatedAt": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "tenantId",
+                                  "restaurantId",
+                                  "name",
+                                  "code",
+                                  "address",
+                                  "timezone",
+                                  "currency",
+                                  "isMain",
+                                  "status",
+                                  "createdAt",
+                                  "updatedAt"
+                                ]
+                              }
+                            }
+                          },
+                          "required": [
+                            "user",
+                            "tenant",
+                            "restaurant",
+                            "branches"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/signup": {
       "post": {
         "summary": "Register new Tenant and Owner",
@@ -709,6 +2448,315 @@
           },
           "401": {
             "description": "Unauthorized or token invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/verify-email": {
+      "post": {
+        "summary": "Verify user email",
+        "description": "Atomically verifies user email address using single-use verification token.",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "description": "Email verification token",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email verified successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, used, or expired verification token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "summary": "Resend email verification",
+        "description": "Sends a new email verification link if the account exists and is unverified. 60-second cooldown per user.",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "description": "User email address",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generic success message regardless of account existence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "summary": "Request password reset",
+        "description": "Sends password reset link if account exists and is ACTIVE. 60-second cooldown per user.",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "description": "User email address",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generic success message regardless of account existence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "summary": "Reset password with token",
+        "description": "Resets password using single-use reset token, updates email verification status, and invalidates all active sessions.",
+        "tags": [
+          "Auth"
+        ],
+        "requestBody": {
+          "description": "Reset token and new password",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 8
+                  }
+                },
+                "required": [
+                  "token",
+                  "newPassword"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid, used, or expired reset token, or validation error",
             "content": {
               "application/json": {
                 "schema": {

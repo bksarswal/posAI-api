@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .refine(
+    (val) => Buffer.byteLength(val, 'utf8') <= 72,
+    'Password cannot exceed 72 bytes',
+  );
+
 export const signupSchema = z
   .object({
     businessName: z
@@ -13,13 +21,7 @@ export const signupSchema = z
       .min(2, 'name must be between 2 and 100 characters')
       .max(100, 'name must be between 2 and 100 characters'),
     email: z.string().trim().email('Invalid email address').toLowerCase(),
-    password: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .refine(
-        (val) => Buffer.byteLength(val, 'utf8') <= 72,
-        'Password cannot exceed 72 bytes',
-      ),
+    password: passwordSchema,
     phone: z.string().trim().optional(),
   })
   .strict();
@@ -73,13 +75,7 @@ export const refreshSuccessResponseSchema = loginSuccessResponseSchema;
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password is required'),
-    newPassword: z
-      .string()
-      .min(8, 'Password must be at least 8 characters')
-      .refine(
-        (val) => Buffer.byteLength(val, 'utf8') <= 72,
-        'Password cannot exceed 72 bytes',
-      ),
+    newPassword: passwordSchema,
   })
   .strict()
   .refine((data) => data.currentPassword !== data.newPassword, {
@@ -93,3 +89,41 @@ export const changePasswordSuccessResponseSchema = z.object({
   success: z.literal(true),
   message: z.string(),
 });
+
+export const authGenericSuccessResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
+});
+
+export const verifyEmailSchema = z
+  .object({
+    token: z.string().min(1, 'Verification token is required'),
+  })
+  .strict();
+
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
+export const resendVerificationSchema = z
+  .object({
+    email: z.string().trim().email('Invalid email address').toLowerCase(),
+  })
+  .strict();
+
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+
+export const forgotPasswordSchema = z
+  .object({
+    email: z.string().trim().email('Invalid email address').toLowerCase(),
+  })
+  .strict();
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, 'Reset token is required'),
+    newPassword: passwordSchema,
+  })
+  .strict();
+
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

@@ -10,6 +10,10 @@ import type {
   SignupInput,
   LoginInput,
   ChangePasswordInput,
+  VerifyEmailInput,
+  ResendVerificationInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
 } from './auth.validation.js';
 
 /**
@@ -165,6 +169,93 @@ export const changePassword = async (
     return sendSuccess(res, {
       statusCode: 200,
       message: 'Password changed. Please log in again.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller for POST /api/v1/auth/verify-email.
+ * Verifies email using single-use token.
+ */
+export const verifyEmail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<Response | void> => {
+  try {
+    await AuthService.verifyEmail(req.body as VerifyEmailInput);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: 'Email verified successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller for POST /api/v1/auth/resend-verification.
+ * Issues a new verification token and emails user if eligible (cooldown 60s).
+ */
+export const resendVerification = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<Response | void> => {
+  try {
+    const { email } = req.body as ResendVerificationInput;
+    const message = await AuthService.resendVerification(email);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller for POST /api/v1/auth/forgot-password.
+ * Issues password reset token and emails user if account is ACTIVE.
+ */
+export const forgotPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<Response | void> => {
+  try {
+    const { email } = req.body as ForgotPasswordInput;
+    const message = await AuthService.forgotPassword(email);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Controller for POST /api/v1/auth/reset-password.
+ * Resets user password, updates emailVerified, and invalidates all active sessions.
+ */
+export const resetPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<Response | void> => {
+  try {
+    await AuthService.resetPassword(req.body as ResetPasswordInput);
+
+    return sendSuccess(res, {
+      statusCode: 200,
+      message:
+        'Password reset successfully. Please log in with your new password.',
     });
   } catch (error) {
     next(error);

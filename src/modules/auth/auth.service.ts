@@ -5,6 +5,13 @@ import jwt from 'jsonwebtoken';
 import { TenantService } from '../tenant/index.js';
 import { UserService } from '../user/index.js';
 import * as RefreshTokenService from './refreshToken.service.js';
+import * as AuthTokenService from './authToken.service.js';
+import { getEmailProvider } from '../../utils/email/index.js';
+import {
+  getVerificationEmailTemplate,
+  getPasswordResetEmailTemplate,
+} from './auth.emails.js';
+import { AUTH_TOKEN_RESEND_COOLDOWN_SECONDS } from './auth.constants.js';
 import { generateTenantSlug } from '../../utils/slug.js';
 import { hashPassword, verifyPassword } from '../../utils/password.js';
 import { generateToken, hashToken } from '../../utils/token.js';
@@ -92,6 +99,35 @@ export async function signup(input: SignupInput): Promise<SignupResponseData> {
 
       const userDoc: UserDocument = createdUser;
       const tenantDoc: TenantDocument = createdTenant;
+
+      // If AUTO_VERIFY_EMAIL is false, create verification token and send email.
+      // Send failure does NOT fail signup.
+      if (!env.AUTO_VERIFY_EMAIL) {
+        try {
+          const { rawToken } = await AuthTokenService.createAuthToken({
+            tenantId: tenantDoc._id,
+            userId: userDoc._id,
+            type: 'EMAIL_VERIFICATION',
+          });
+
+          const template = getVerificationEmailTemplate({
+            name: userDoc.name,
+            token: rawToken,
+          });
+
+          await getEmailProvider().send({
+            to: userDoc.email,
+            subject: template.subject,
+            text: template.text,
+            html: template.html,
+          });
+        } catch (emailErr) {
+          logger.error(
+            { err: emailErr, userId: userDoc._id.toString() },
+            'Failed to dispatch verification email during signup',
+          );
+        }
+      }
 
       return {
         user: {
@@ -437,4 +473,210 @@ export async function changePassword(
 
   // Revoke all refresh token families for this user across all tenants
   await RefreshTokenService.revokeAllForUser(userId);
+}
+
+export const GENERIC_RESEND_VERIFICATION_MESSAGE =
+  'If the account exists and is not verified, an email has been sent';
+
+export const GENERIC_FORGOT_PASSWORD_MESSAGE =
+  'If the account exists, a password reset email has been sent';
+
+/**
+ * Handles email verification:
+ * Claims verification token and marks user emailVerified inside ONE transaction,
+ * ensuring failure during user update rolls back the token claim.
+ */
+export async function verifyEmail(input: { token: string }): Promise<void> {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const token = await AuthTokenService.claimTokenAtomic(
+        input.token,
+        'EMAIL_VERIFICATION',
+        { session },
+      );
+
+      if (!token) {
+        throw new AppError(
+          'Invalid or expired verification token',
+          400,
+          'INVALID_OR_EXPIRED_TOKEN',
+        );
+      }
+
+      await runWithTenant(token.tenantId, async () => {
+        await UserService.markEmailVerified(token.userId, { session });
+      });
+    });
+  } finally {
+    await session.endSession();
+  }
+}
+
+/**
+ * Handles resend verification request:
+ * Always returns generic 200 message. Only when user exists, is unverified,
+ * and last token is older than 60 seconds: issues new token and dispatches email asynchronously.
+ */
+export async function resendVerification(email: string): Promise<string> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await UserService.findUserByEmailGlobal(normalizedEmail);
+
+  if (user && !user.emailVerified) {
+    const latestToken = await AuthTokenService.findLatestTokenForUser(
+      user._id,
+      'EMAIL_VERIFICATION',
+    );
+
+    const now = new Date();
+    const isWithinCooldown =
+      latestToken &&
+      now.getTime() - latestToken.createdAt.getTime() <
+        AUTH_TOKEN_RESEND_COOLDOWN_SECONDS * 1000;
+
+    if (!isWithinCooldown) {
+      const { rawToken } = await AuthTokenService.createAuthToken({
+        tenantId: user.tenantId,
+        userId: user._id,
+        type: 'EMAIL_VERIFICATION',
+      });
+
+      const template = getVerificationEmailTemplate({
+        name: user.name,
+        token: rawToken,
+      });
+
+      getEmailProvider()
+        .send({
+          to: user.email,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+        })
+        .catch((err) => {
+          logger.error(
+            { err, userId: user._id.toString() },
+            'Failed to dispatch resend-verification email',
+          );
+        });
+    }
+  }
+
+  return GENERIC_RESEND_VERIFICATION_MESSAGE;
+}
+
+/**
+ * Handles forgot password request:
+ * Always returns generic 200 message. Only when user exists and is ACTIVE:
+ * issues PASSWORD_RESET token (cooldown 60 seconds per user) and dispatches email asynchronously.
+ */
+export async function forgotPassword(email: string): Promise<string> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const user = await UserService.findUserByEmailGlobal(normalizedEmail);
+
+  if (user && user.status === 'ACTIVE') {
+    const latestToken = await AuthTokenService.findLatestTokenForUser(
+      user._id,
+      'PASSWORD_RESET',
+    );
+
+    const now = new Date();
+    const isWithinCooldown =
+      latestToken &&
+      now.getTime() - latestToken.createdAt.getTime() <
+        AUTH_TOKEN_RESEND_COOLDOWN_SECONDS * 1000;
+
+    if (!isWithinCooldown) {
+      const { rawToken } = await AuthTokenService.createAuthToken({
+        tenantId: user.tenantId,
+        userId: user._id,
+        type: 'PASSWORD_RESET',
+      });
+
+      const template = getPasswordResetEmailTemplate({
+        name: user.name,
+        token: rawToken,
+      });
+
+      getEmailProvider()
+        .send({
+          to: user.email,
+          subject: template.subject,
+          text: template.text,
+          html: template.html,
+        })
+        .catch((err) => {
+          logger.error(
+            { err, userId: user._id.toString() },
+            'Failed to dispatch password reset email',
+          );
+        });
+    }
+  }
+
+  return GENERIC_FORGOT_PASSWORD_MESSAGE;
+}
+
+/**
+ * Handles password reset:
+ * In one transaction: claims token atomically, validates user ACTIVE status,
+ * sets new passwordHash, passwordChangedAt = now, mustChangePassword = false, emailVerified = true.
+ * Invalidates other unused reset tokens and revokes all refresh token families for user.
+ */
+export async function resetPassword(input: {
+  token: string;
+  newPassword: string;
+}): Promise<void> {
+  const session = await mongoose.startSession();
+  let claimedTokenUserId: mongoose.Types.ObjectId | null = null;
+
+  try {
+    await session.withTransaction(async () => {
+      const token = await AuthTokenService.claimTokenAtomic(
+        input.token,
+        'PASSWORD_RESET',
+        { session },
+      );
+
+      if (!token) {
+        throw new AppError(
+          'Invalid or expired password reset token',
+          400,
+          'INVALID_OR_EXPIRED_TOKEN',
+        );
+      }
+
+      claimedTokenUserId = token.userId;
+
+      const user = await runWithTenant(token.tenantId, async () => {
+        return UserService.findUserById(token.userId.toString());
+      });
+
+      if (!user || user.status !== 'ACTIVE') {
+        throw new AppError(
+          'Invalid or expired password reset token',
+          400,
+          'INVALID_OR_EXPIRED_TOKEN',
+        );
+      }
+
+      const passwordHash = await hashPassword(input.newPassword);
+
+      await runWithTenant(token.tenantId, async () => {
+        await UserService.resetPassword(user._id, passwordHash, { session });
+      });
+
+      await AuthTokenService.invalidateTokensForUser(
+        user._id,
+        'PASSWORD_RESET',
+        { session },
+      );
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  if (claimedTokenUserId) {
+    await RefreshTokenService.revokeAllForUser(claimedTokenUserId);
+  }
 }

@@ -21,6 +21,18 @@ describe('parseEnv', () => {
     LOG_LEVEL: 'silent',
   };
 
+  const validProdConfig = {
+    ...validConfig,
+    NODE_ENV: 'production',
+    BCRYPT_ROUNDS: '12',
+    EMAIL_PROVIDER: 'smtp',
+    EMAIL_FROM: 'noreply@posai.app',
+    SMTP_HOST: 'smtp.mailgun.org',
+    SMTP_PORT: '587',
+    SMTP_USER: 'postmaster@posai.app',
+    SMTP_PASS: 'secret-smtp-password',
+  };
+
   it('successfully parses valid environment variables and returns a frozen object', () => {
     const parsed = parseEnv(validConfig);
     expect(parsed.PORT).toBe(8080);
@@ -57,8 +69,7 @@ describe('parseEnv', () => {
 
   it('rejects JWT_ACCESS_SECRET starting with "change-me" in production', () => {
     const prodConfig = {
-      ...validConfig,
-      NODE_ENV: 'production',
+      ...validProdConfig,
       JWT_ACCESS_SECRET: 'change-me-to-a-very-long-secret-key-32-chars-long',
     };
 
@@ -69,10 +80,8 @@ describe('parseEnv', () => {
 
   it('accepts valid JWT_ACCESS_SECRET in production that does not start with "change-me"', () => {
     const prodConfig = {
-      ...validConfig,
-      NODE_ENV: 'production',
+      ...validProdConfig,
       JWT_ACCESS_SECRET: 'secure_production_secret_key_at_least_32_chars_long',
-      BCRYPT_ROUNDS: '12',
     };
 
     const parsed = parseEnv(prodConfig);
@@ -92,8 +101,7 @@ describe('parseEnv', () => {
 
   it('fails startup if NODE_ENV=production and BCRYPT_ROUNDS < 10', () => {
     const prodInvalidConfig = {
-      ...validConfig,
-      NODE_ENV: 'production',
+      ...validProdConfig,
       BCRYPT_ROUNDS: '9',
     };
 
@@ -104,8 +112,7 @@ describe('parseEnv', () => {
 
   it('accepts BCRYPT_ROUNDS >= 10 in production', () => {
     const prodValidConfig = {
-      ...validConfig,
-      NODE_ENV: 'production',
+      ...validProdConfig,
       BCRYPT_ROUNDS: '10',
     };
 
@@ -127,9 +134,7 @@ describe('parseEnv', () => {
 
   it('fails startup if NODE_ENV=production and AUTO_VERIFY_EMAIL=true', () => {
     const prodInvalidConfig = {
-      ...validConfig,
-      NODE_ENV: 'production',
-      BCRYPT_ROUNDS: '12',
+      ...validProdConfig,
       AUTO_VERIFY_EMAIL: 'true',
     };
 
@@ -145,6 +150,71 @@ describe('parseEnv', () => {
     const withoutProxy = { ...validConfig };
     delete (withoutProxy as Record<string, unknown>)['TRUST_PROXY'];
     expect(parseEnv(withoutProxy).TRUST_PROXY).toBe(0);
+  });
+
+  describe('EMAIL_PROVIDER and SMTP configuration', () => {
+    it('defaults EMAIL_PROVIDER to "log"', () => {
+      const parsed = parseEnv(validConfig);
+      expect(parsed.EMAIL_PROVIDER).toBe('log');
+    });
+
+    it('fails startup if NODE_ENV=production and EMAIL_PROVIDER="log"', () => {
+      const prodLogConfig = {
+        ...validConfig,
+        NODE_ENV: 'production',
+        BCRYPT_ROUNDS: '12',
+        EMAIL_PROVIDER: 'log',
+      };
+
+      expect(() => parseEnv(prodLogConfig)).toThrowError(
+        /EMAIL_PROVIDER: EMAIL_PROVIDER cannot be "log" in production/,
+      );
+    });
+
+    it('requires all SMTP_* and EMAIL_FROM fields when EMAIL_PROVIDER="smtp"', () => {
+      const smtpMissingAll = {
+        ...validConfig,
+        EMAIL_PROVIDER: 'smtp',
+      };
+
+      expect(() => parseEnv(smtpMissingAll)).toThrowError(
+        /EMAIL_FROM: EMAIL_FROM is required when EMAIL_PROVIDER is smtp/,
+      );
+      expect(() => parseEnv(smtpMissingAll)).toThrowError(
+        /SMTP_HOST: SMTP_HOST is required when EMAIL_PROVIDER is smtp/,
+      );
+      expect(() => parseEnv(smtpMissingAll)).toThrowError(
+        /SMTP_PORT: SMTP_PORT is required when EMAIL_PROVIDER is smtp/,
+      );
+      expect(() => parseEnv(smtpMissingAll)).toThrowError(
+        /SMTP_USER: SMTP_USER is required when EMAIL_PROVIDER is smtp/,
+      );
+      expect(() => parseEnv(smtpMissingAll)).toThrowError(
+        /SMTP_PASS: SMTP_PASS is required when EMAIL_PROVIDER is smtp/,
+      );
+    });
+
+    it('accepts valid SMTP configuration in production and development', () => {
+      const validSmtp = {
+        ...validConfig,
+        NODE_ENV: 'production',
+        BCRYPT_ROUNDS: '12',
+        EMAIL_PROVIDER: 'smtp',
+        EMAIL_FROM: 'noreply@posai.app',
+        SMTP_HOST: 'smtp.mailgun.org',
+        SMTP_PORT: '587',
+        SMTP_USER: 'postmaster@posai.app',
+        SMTP_PASS: 'secret-smtp-password',
+      };
+
+      const parsed = parseEnv(validSmtp);
+      expect(parsed.EMAIL_PROVIDER).toBe('smtp');
+      expect(parsed.EMAIL_FROM).toBe('noreply@posai.app');
+      expect(parsed.SMTP_HOST).toBe('smtp.mailgun.org');
+      expect(parsed.SMTP_PORT).toBe(587);
+      expect(parsed.SMTP_USER).toBe('postmaster@posai.app');
+      expect(parsed.SMTP_PASS).toBe('secret-smtp-password');
+    });
   });
 
   describe('setEnvForTesting / resetEnvForTesting safety guard', () => {

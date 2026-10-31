@@ -37,12 +37,72 @@ export const envSchema = z
 
     TRUST_PROXY: z.coerce.number().int().min(0).default(0),
 
+    EMAIL_PROVIDER: z.enum(['log', 'smtp']).default('log'),
+    EMAIL_FROM: z
+      .string()
+      .email('EMAIL_FROM must be a valid email address')
+      .optional(),
+    SMTP_HOST: z.string().min(1, 'SMTP_HOST cannot be empty').optional(),
+    SMTP_PORT: z.coerce
+      .number()
+      .int()
+      .positive('SMTP_PORT must be a positive integer')
+      .optional(),
+    SMTP_USER: z.string().min(1, 'SMTP_USER cannot be empty').optional(),
+    SMTP_PASS: z.string().min(1, 'SMTP_PASS cannot be empty').optional(),
+
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
   })
   .superRefine((data, ctx) => {
+    if (data.EMAIL_PROVIDER === 'smtp') {
+      if (!data.EMAIL_FROM) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'EMAIL_FROM is required when EMAIL_PROVIDER is smtp',
+          path: ['EMAIL_FROM'],
+        });
+      }
+      if (!data.SMTP_HOST) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'SMTP_HOST is required when EMAIL_PROVIDER is smtp',
+          path: ['SMTP_HOST'],
+        });
+      }
+      if (!data.SMTP_PORT) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'SMTP_PORT is required when EMAIL_PROVIDER is smtp',
+          path: ['SMTP_PORT'],
+        });
+      }
+      if (!data.SMTP_USER) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'SMTP_USER is required when EMAIL_PROVIDER is smtp',
+          path: ['SMTP_USER'],
+        });
+      }
+      if (!data.SMTP_PASS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'SMTP_PASS is required when EMAIL_PROVIDER is smtp',
+          path: ['SMTP_PASS'],
+        });
+      }
+    }
+
     if (data.NODE_ENV === 'production') {
+      if (data.EMAIL_PROVIDER === 'log') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'EMAIL_PROVIDER cannot be "log" in production',
+          path: ['EMAIL_PROVIDER'],
+        });
+      }
+
       if (data.BCRYPT_ROUNDS < 10) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
