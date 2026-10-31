@@ -148,10 +148,18 @@ import * as AuthService from "./auth.service.js";
 
 Write comments only when they explain WHY. No unnecessary comments.
 
-## Testing and Git
+## Testing
 
 - Write tests with the feature: unit tests for services and the money utility, integration tests for APIs.
-- Conventional commits (`feat(auth): add signup API`). Small commits, one branch per feature (`feat/sprintN-name`).
+
+## Git
+
+- After I approve a task, commit it locally: one task = one commit, Conventional Commits message (feat/fix/chore/docs/test(scope): summary), on the current feature branch (feat/sprintN-name). Never commit to main.
+- Before committing, run `git status --short` and show it to me. Stage files by name or directory, never blindly with `git add -A`. Never stage .env or any secret, build output, coverage, or temp files.
+- Never use --no-verify, --force or --force-with-lease, and never rewrite history that is already pushed.
+- If a Husky or lint-staged check fails, fix the cause; do not bypass it.
+- Never run `git push` yourself. After committing, tell me the exact push command and wait.
+- Do not create or delete branches or tags unless I ask.
 
 ---
 
