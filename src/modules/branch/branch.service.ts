@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { Branch } from './branch.model.js';
 import type { BranchDocument } from './branch.interface.js';
 import type { BranchResponseDto } from './branch.types.js';
@@ -150,4 +151,44 @@ export async function updateBranch(
   }
 
   return updated;
+}
+
+/**
+ * Asserts that all provided branch IDs exist in the active tenant context and have status === 'ACTIVE'.
+ * Throws 400 with code INVALID_BRANCH if any branch does not exist, belongs to another tenant, or is inactive.
+ */
+export async function assertBranchesActiveInTenant(
+  branchIds: Array<string | Types.ObjectId>,
+): Promise<void> {
+  if (!branchIds || branchIds.length === 0) {
+    return;
+  }
+
+  const objectIds: Types.ObjectId[] = [];
+  for (const id of branchIds) {
+    const idStr = id.toString();
+    if (!/^[0-9a-fA-F]{24}$/.test(idStr)) {
+      throw new AppError(
+        'One or more branches are invalid or inactive',
+        400,
+        'INVALID_BRANCH',
+      );
+    }
+    objectIds.push(new Types.ObjectId(idStr));
+  }
+
+  const uniqueIdStrings = new Set(branchIds.map((id) => id.toString()));
+
+  const activeBranches = await Branch.find({
+    _id: { $in: objectIds },
+    status: 'ACTIVE',
+  }).select('_id');
+
+  if (activeBranches.length !== uniqueIdStrings.size) {
+    throw new AppError(
+      'One or more branches are invalid or inactive',
+      400,
+      'INVALID_BRANCH',
+    );
+  }
 }

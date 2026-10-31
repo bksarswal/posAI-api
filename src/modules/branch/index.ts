@@ -1,5 +1,8 @@
 export * as BranchService from './branch.service.js';
-export { formatBranch } from './branch.service.js';
+export {
+  formatBranch,
+  assertBranchesActiveInTenant,
+} from './branch.service.js';
 export * as BranchController from './branch.controller.js';
 export { branchRouter } from './branch.route.js';
 export * from './branch.access.js';

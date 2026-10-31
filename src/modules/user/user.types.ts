@@ -28,3 +28,34 @@ export interface GetMeResponseData {
   restaurant: RestaurantResponseDto | null;
   branches: BranchResponseDto[];
 }
+
+export interface UserResponseDto {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  phone?: string;
+  role: UserRole;
+  branchIds: string[];
+  status: string;
+  emailVerified: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateStaffResponseData {
+  user: UserResponseDto;
+  temporaryPassword: string;
+}
+
+export interface ResetPasswordResponseData {
+  temporaryPassword: string;
+}
+
+export interface PaginatedUsersData {
+  items: UserResponseDto[];
+  page: number;
+  limit: number;
+  total: number;
+}

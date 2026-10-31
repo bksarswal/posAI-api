@@ -1,9 +1,39 @@
 import { describe, it, expect } from 'vitest';
-import { hashPassword, verifyPassword } from '../../src/utils/password.js';
+import {
+  hashPassword,
+  verifyPassword,
+  generateTemporaryPassword,
+  UNAMBIGUOUS_PASSWORD_ALPHABET,
+} from '../../src/utils/password.js';
 import { generateToken, hashToken } from '../../src/utils/token.js';
+import { passwordSchema } from '../../src/modules/auth/auth.validation.js';
 
 describe('Password & Token Helpers', () => {
-  describe('password.ts (bcryptjs)', () => {
+  describe('password.ts (bcryptjs & temporary password)', () => {
+    it('generateTemporaryPassword returns 12-char password from unambiguous alphabet and passes passwordSchema', () => {
+      const forbiddenLookAlikes = ['0', 'O', '1', 'l', 'I'];
+      const seen = new Set<string>();
+
+      for (let i = 0; i < 100; i++) {
+        const pwd = generateTemporaryPassword();
+        expect(pwd).toHaveLength(12);
+
+        // Check each character belongs to unambiguous alphabet
+        for (const char of pwd) {
+          expect(UNAMBIGUOUS_PASSWORD_ALPHABET.includes(char)).toBe(true);
+          expect(forbiddenLookAlikes.includes(char)).toBe(false);
+        }
+
+        // Must pass passwordSchema
+        expect(() => passwordSchema.parse(pwd)).not.toThrow();
+
+        seen.add(pwd);
+      }
+
+      // Uniqueness check: all 100 generated passwords should be distinct
+      expect(seen.size).toBe(100);
+    });
+
     it('successfully hashes and verifies a password round-trip', async () => {
       const plain = 'SuperSecret123!';
       const hash = await hashPassword(plain);

@@ -1,6 +1,11 @@
 export * as UserService from './user.service.js';
 export * as UserController from './user.controller.js';
-export { userRouter } from './user.route.js';
+export {
+  userRouter,
+  createUserRouter,
+  type UserRateLimitOptions,
+} from './user.route.js';
+export * from './user.roles.js';
 export * from './user.types.js';
 export * from './user.validation.js';
 export { User } from './user.model.js';

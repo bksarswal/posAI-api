@@ -164,3 +164,54 @@ export async function createStaffUser(
     cookie,
   };
 }
+
+/**
+ * Creates a restaurant and an initial main branch for a tenant using the owner's credentials.
+ */
+export async function createTestRestaurantAndBranch(
+  app: Express,
+  ownerAccessToken: string,
+  branchOptions?: { name?: string; code?: string },
+): Promise<{
+  restaurant: Record<string, unknown>;
+  branch: Record<string, unknown> & { id: string; name: string; code: string };
+}> {
+  const restRes = await request(app)
+    .post('/api/v1/restaurant')
+    .set('Authorization', `Bearer ${ownerAccessToken}`)
+    .send({
+      name: 'Default Test Restaurant',
+      phone: '9876543210',
+      email: 'test@restaurant.com',
+      address: {
+        line1: '123 Main St',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        pincode: '560001',
+      },
+    });
+
+  const branchCode =
+    branchOptions?.code ??
+    `BR-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+  const branchRes = await request(app)
+    .post('/api/v1/branches')
+    .set('Authorization', `Bearer ${ownerAccessToken}`)
+    .send({
+      name: branchOptions?.name ?? 'Main Branch',
+      code: branchCode,
+      address: {
+        line1: '123 Main St',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        pincode: '560001',
+      },
+      phone: '9876543210',
+    });
+
+  return {
+    restaurant: restRes.body.data?.restaurant,
+    branch: branchRes.body.data?.branch,
+  };
+}

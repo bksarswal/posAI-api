@@ -386,12 +386,16 @@ export async function refreshSession(
     claimedToken.tenantId.toString(),
   );
 
+  const isTokenOlderThanPasswordChange =
+    user?.passwordChangedAt && claimedToken.createdAt < user.passwordChangedAt;
+
   if (
     !user ||
     user.status !== 'ACTIVE' ||
     !user.emailVerified ||
     !tenant ||
-    tenant.status !== 'ACTIVE'
+    tenant.status !== 'ACTIVE' ||
+    isTokenOlderThanPasswordChange
   ) {
     await RefreshTokenService.revokeFamily(claimedToken.familyId);
     throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');

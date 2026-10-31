@@ -163,3 +163,32 @@ This document records architectural, technical, and operational decisions agreed
 - **Deactivation**: Branches are deactivated by setting `status: 'INACTIVE'` via `PATCH /api/v1/branches/:id`.
 - **Main Branch Protection**: The main branch of a tenant (`isMain: true`) cannot be deactivated; attempting to set it to `INACTIVE` returns `409 CANNOT_DEACTIVATE_MAIN_BRANCH`.
 - **Context**: Preserves referential integrity and audit trails for historical orders, invoices, inventory movements, staff audit logs, and analytics tied to the branch.
+
+---
+
+## 20. Refresh Token Invalidation on Password Change (Cross-Module Decoupling)
+- **Decision**: In `refreshSession`, after the atomic token claim and user reload, if `user.passwordChangedAt` exists and `claimedToken.createdAt < user.passwordChangedAt`, the entire refresh token family is revoked, the refresh cookie is cleared, and `401 INVALID_REFRESH_TOKEN` is returned.
+- **Context**: Enables administrative password resets and user password updates to invalidate all active refresh sessions across all devices without requiring the user module to import the auth module (avoiding circular module dependencies).
+
+---
+
+## 21. Audit Logging Strategy (Log-Only Phase 1)
+- **Decision**: `auditLog({ action, actorId, tenantId, targetId?, details? })` emits a structured JSON log entry via Pino at `info` level with `audit: true`.
+- **Security**: Passwords, plaintext credentials, and tokens are strictly excluded from audit payloads.
+- **Pilot TODO**: Audit logging is currently log-only (captured in stdout and log aggregators). A database-backed `AuditLog` collection is a mandatory TODO before pilot launch.
+
+---
+
+## 22. Staff Management Architecture & Role Rules
+- **Temporary Passwords vs. Email Invites**:
+  - Restaurant floor staff (waiters, dishwashers, chefs, cashiers) often lack personal/corporate email inboxes or smartphone access during onboarding shifts.
+  - Generating an unambiguous 12-character temporary password on creation/reset allows managers to onboard workers immediately. Workers are forced to change their password on first login (`mustChangePassword: true`), blocking all protected routes with `403 PASSWORD_CHANGE_REQUIRED` until changed.
+- **Global Staff Email Uniqueness**:
+  - Staff user emails are indexed uniquely across MongoDB globally (`{ email: 1 }`). This supports universal email-and-password login without requiring tenant identifier lookups upfront.
+- **Role Permission & Invariant Matrix**:
+  - Handled by a single pure validation function (`validateStaffRoleRules`):
+    - **Owner Protection**: Nobody can modify or reset an `OWNER` account via staff APIs (403 `CANNOT_MODIFY_OWNER`). The `OWNER` role cannot be assigned or created (400 `CANNOT_ASSIGN_OWNER`).
+    - **Admin Tier**: Only `OWNER` can create an `ADMIN`, promote a user to `ADMIN`, or edit, demote, deactivate, or reset an `ADMIN`. An `ADMIN` attempting any of these receives 403 `FORBIDDEN`.
+    - **Self-Modification**: Nobody can change their own role, branch assignments, or status via staff APIs (403 `FORBIDDEN`). Deactivating oneself returns 409 `CANNOT_DEACTIVATE_SELF`.
+    - **Branch Invariants**: `ADMIN` accounts are tenant-wide and must have empty `branchIds`. Staff roles (`MANAGER`, `WAITER`, `CASHIER`, `CHEF`) must be assigned to at least one branch. All assigned branches must exist and be `ACTIVE` in the tenant (`assertBranchesActiveInTenant`).
+    - **Staff Role Transfers**: `ADMIN` and `OWNER` can reassign roles between staff roles (e.g. `MANAGER` to `CASHIER`), re-validating branch invariants against the resulting state.

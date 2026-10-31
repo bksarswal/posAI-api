@@ -14,6 +14,7 @@ import type { AuthRateLimitOptions } from './modules/auth/index.js';
 
 export interface RateLimitOverrides extends AuthRateLimitOptions {
   global?: { windowMs?: number; max?: number };
+  userResetPassword?: { windowMs?: number; max?: number };
 }
 
 export interface AppOptions {

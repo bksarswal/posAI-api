@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { indianPhoneSchema } from '../../utils/validators.js';
 
 export const passwordSchema = z
   .string()
@@ -22,7 +23,7 @@ export const signupSchema = z
       .max(100, 'name must be between 2 and 100 characters'),
     email: z.string().trim().email('Invalid email address').toLowerCase(),
     password: passwordSchema,
-    phone: z.string().trim().optional(),
+    phone: indianPhoneSchema.optional(),
   })
   .strict();
 

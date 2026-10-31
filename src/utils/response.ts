@@ -4,6 +4,7 @@ export interface SuccessResponseOptions<T = unknown> {
   statusCode?: number;
   message: string;
   data?: T;
+  meta?: Record<string, unknown>;
 }
 
 export interface ErrorResponseOptions {
@@ -17,6 +18,7 @@ export interface SuccessResponseBody<T = unknown> {
   success: true;
   message: string;
   data?: T;
+  meta?: Record<string, unknown>;
 }
 
 export interface ErrorResponseBody {
@@ -31,12 +33,13 @@ export interface ErrorResponseBody {
  */
 export function sendSuccess<T>(
   res: Response,
-  { statusCode = 200, message, data }: SuccessResponseOptions<T>,
+  { statusCode = 200, message, data, meta }: SuccessResponseOptions<T>,
 ): Response {
   const body: SuccessResponseBody<T> = {
     success: true,
     message,
     ...(data !== undefined ? { data } : {}),
+    ...(meta !== undefined ? { meta } : {}),
   };
   return res.status(statusCode).json(body);
 }

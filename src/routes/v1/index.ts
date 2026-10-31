@@ -4,12 +4,14 @@ import {
   createAuthRouter,
   type AuthRateLimitOptions,
 } from '../../modules/auth/index.js';
-import { userRouter } from '../../modules/user/index.js';
+import { createUserRouter } from '../../modules/user/index.js';
 import { restaurantRouter } from '../../modules/restaurant/index.js';
 import { branchRouter } from '../../modules/branch/index.js';
 
 export interface V1RouterOptions {
-  rateLimits?: AuthRateLimitOptions;
+  rateLimits?: AuthRateLimitOptions & {
+    userResetPassword?: { windowMs?: number; max?: number };
+  };
 }
 
 /**
@@ -26,7 +28,12 @@ export function createV1Router(options?: V1RouterOptions): Router {
 
   // Feature module routers
   router.use('/auth', createAuthRouter(options?.rateLimits));
-  router.use('/users', userRouter);
+  router.use(
+    '/users',
+    createUserRouter({
+      resetPassword: options?.rateLimits?.userResetPassword,
+    }),
+  );
   router.use('/restaurant', restaurantRouter);
   router.use('/branches', branchRouter);
 
