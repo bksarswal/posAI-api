@@ -146,6 +146,35 @@ describe('Task 8: Onboarding APIs (GET /users/me, Restaurant & Branch APIs)', ()
     expect(resWaiter.body.data.branches).toEqual([]);
   });
 
+  it('1b. /users/me: a user created with a phone sees it in /users/me; a user without one has no phone key', async () => {
+    // 1. User without phone has no phone key
+    const { accessToken: tokenWithoutPhone } = await createTenantAndOwner({
+      app,
+    });
+    const resWithoutPhone = await request(app)
+      .get('/api/v1/users/me')
+      .set('Authorization', `Bearer ${tokenWithoutPhone}`);
+
+    expect(resWithoutPhone.status).toBe(200);
+    expect('phone' in resWithoutPhone.body.data.user).toBe(false);
+    expect(resWithoutPhone.body.data.user.phone).toBeUndefined();
+    expect(resWithoutPhone.body.data.user.passwordHash).toBeUndefined();
+
+    // 2. User created with phone sees it in /users/me
+    const { accessToken: tokenWithPhone } = await createTenantAndOwner({
+      app,
+      phone: '+919876543210',
+    });
+    const resWithPhone = await request(app)
+      .get('/api/v1/users/me')
+      .set('Authorization', `Bearer ${tokenWithPhone}`);
+
+    expect(resWithPhone.status).toBe(200);
+    expect('phone' in resWithPhone.body.data.user).toBe(true);
+    expect(resWithPhone.body.data.user.phone).toBe('+919876543210');
+    expect(resWithPhone.body.data.user.passwordHash).toBeUndefined();
+  });
+
   it('2. POST /restaurant: 201; a second one -> 409 RESTAURANT_ALREADY_EXISTS; two CONCURRENT creates -> one 201 and one 409; invalid GSTIN, FSSAI, phone, pincode -> 400; a lowercase GSTIN is stored uppercase; phone is stored as +91...; a body with tenantId or role -> 400; MANAGER, WAITER, CASHIER, CHEF and ADMIN -> 403; unauthenticated -> 401', async () => {
     const { tenant, accessToken: ownerToken } = await createTenantAndOwner({
       app,

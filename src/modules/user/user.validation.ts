@@ -8,6 +8,7 @@ export const getMeUserSchema = z.object({
   tenantId: z.string(),
   name: z.string(),
   email: z.string().email(),
+  phone: z.string().optional(),
   role: z.enum(['OWNER', 'ADMIN', 'MANAGER', 'WAITER', 'CASHIER', 'CHEF']),
   branchIds: z.array(z.string()),
   emailVerified: z.boolean(),

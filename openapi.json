@@ -1661,6 +1661,9 @@
                                   "type": "string",
                                   "format": "email"
                                 },
+                                "phone": {
+                                  "type": "string"
+                                },
                                 "role": {
                                   "type": "string",
                                   "enum": [

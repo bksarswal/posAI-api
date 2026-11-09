@@ -9,6 +9,7 @@ export interface GetMeUserDto {
   tenantId: string;
   name: string;
   email: string;
+  phone?: string;
   role: UserRole;
   branchIds: string[];
   emailVerified: boolean;

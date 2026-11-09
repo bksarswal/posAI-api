@@ -785,6 +785,16 @@ describe('Task 9: Staff Management APIs (/api/v1/users)', () => {
     expect(resUpdateMe.status).toBe(200);
     expect(resUpdateMe.body.data.user.name).toBe('New Owner Name');
     expect(resUpdateMe.body.data.user.phone).toBe('+919876543210');
+    expect(resUpdateMe.body.data.user.passwordHash).toBeUndefined();
+    expect(resUpdateMe.body.data.user.__v).toBeUndefined();
+
+    // Verify GET /users/me reflects the updated phone
+    const resGetMeAfter = await request(app)
+      .get('/api/v1/users/me')
+      .set('Authorization', `Bearer ${accessToken}`);
+    expect(resGetMeAfter.status).toBe(200);
+    expect(resGetMeAfter.body.data.user.phone).toBe('+919876543210');
+    expect(resGetMeAfter.body.data.user.passwordHash).toBeUndefined();
 
     // 2. Role or email in body -> 400
     const resBadRole = await request(app)

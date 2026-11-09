@@ -18,6 +18,7 @@ export interface CreateTenantAndOwnerOptions {
   slug?: string;
   ownerName?: string;
   email?: string;
+  phone?: string;
   password?: string;
   emailVerified?: boolean;
   mustChangePassword?: boolean;
@@ -59,6 +60,7 @@ export async function createTenantAndOwner(
     return UserService.createUser({
       name: options.ownerName ?? 'Owner User',
       email,
+      phone: options.phone,
       passwordHash,
       role: 'OWNER',
       emailVerified: options.emailVerified ?? true,
@@ -97,6 +99,7 @@ export interface CreateStaffUserOptions {
   branchIds?: Array<string | Types.ObjectId>;
   name?: string;
   email?: string;
+  phone?: string;
   password?: string;
   emailVerified?: boolean;
   mustChangePassword?: boolean;
@@ -128,6 +131,7 @@ export async function createStaffUser(
     const created = await UserService.createUser({
       name: options.name ?? `${options.role} Staff`,
       email,
+      phone: options.phone,
       passwordHash,
       role: options.role,
       emailVerified: options.emailVerified ?? true,
