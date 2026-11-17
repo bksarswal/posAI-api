@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import mongoose, { Error as MongooseError } from 'mongoose';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import mongoose, { Error as MongooseError } from 'mongoose';
 import { Tenant } from '../../src/modules/tenant/tenant.model.js';
 import { Restaurant } from '../../src/modules/restaurant/restaurant.model.js';
 import { Branch } from '../../src/modules/branch/branch.model.js';
@@ -13,10 +12,12 @@ import { AuthToken } from '../../src/modules/auth/authToken.model.js';
 import { runWithTenant } from '../../src/utils/tenantContext.js';
 import { withGlobalScope } from '../../src/utils/tenantBypass.js';
 import { TenantScopingError } from '../../src/utils/appError.js';
+import { startTestDb, stopTestDb } from '../helpers/testDb.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 describe('Tenant, Restaurant, Branch, User, and RefreshToken Models & Indexes', () => {
-  let replSet: MongoMemoryReplSet;
-
   const sampleAddress = {
     line1: '100 Indiranagar 100ft Rd',
     city: 'Bengaluru',
@@ -25,8 +26,7 @@ describe('Tenant, Restaurant, Branch, User, and RefreshToken Models & Indexes', 
   };
 
   beforeAll(async () => {
-    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
-    await mongoose.connect(replSet.getUri());
+    await startTestDb();
 
     // Ensure all unique, compound, and partial indexes are synced in the database
     await Tenant.init();
@@ -38,8 +38,7 @@ describe('Tenant, Restaurant, Branch, User, and RefreshToken Models & Indexes', 
   }, 60000);
 
   afterAll(async () => {
-    await mongoose.disconnect();
-    await replSet.stop();
+    await stopTestDb();
   });
 
   beforeEach(async () => {

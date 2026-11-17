@@ -11,10 +11,6 @@ import type {
  * Production email provider that dispatches transactional emails via SMTP using nodemailer.
  */
 
-console.log('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@');
-console.log('USER:', env.SMTP_USER);
-console.log('PASS LENGTH:', env.SMTP_PASS?.length);
-
 export class SmtpEmailProvider implements EmailProvider {
   private transporter: Transporter;
 

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import mongoose, { Schema, model, Types } from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { tenantScopingPlugin } from '../../src/plugins/tenantScoping.plugin.js';
 import { runWithTenant } from '../../src/utils/tenantContext.js';
 import { withGlobalScope } from '../../src/utils/tenantBypass.js';
 import { TenantScopingError } from '../../src/utils/appError.js';
+import { startTestDb, stopTestDb } from '../helpers/testDb.js';
 
 interface ITestItem {
   _id: Types.ObjectId;
@@ -39,17 +39,15 @@ testChildSchema.plugin(tenantScopingPlugin);
 const TestChild = model<ITestChild>('TestChild', testChildSchema);
 
 describe('Tenant Scoping Mongoose Plugin', () => {
-  let replSet: MongoMemoryReplSet;
-
   beforeAll(async () => {
-    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
-    const uri = replSet.getUri();
-    await mongoose.connect(uri);
+    await startTestDb();
+    // init the test-local models for indexes
+    await TestItem.init();
+    await TestChild.init();
   }, 60000);
 
   afterAll(async () => {
-    await mongoose.disconnect();
-    await replSet.stop();
+    await stopTestDb();
   });
 
   beforeEach(async () => {

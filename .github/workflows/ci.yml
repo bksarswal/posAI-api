@@ -2,24 +2,37 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'feat/**'
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'feat/**'
 
 jobs:
   validate:
     name: Lint, Format, Typecheck, Test, Build & OpenAPI Check
     runs-on: ubuntu-latest
+
     env:
       NODE_ENV: test
-      PORT: 8080
+      PORT: '8080'
       MONGODB_URI: mongodb://localhost:27017/posai-ci
+      MONGOMS_VERSION: '7.0.14'
+      # Pin the binary download directory so actions/cache@v4 always hits the same path.
+      # Without this, mongodb-memory-server resolves to ~/.cache/mongodb-binaries (homeCache)
+      # or node_modules/.cache/mongodb-memory-server (modulesCache) depending on runtime state.
+      MONGOMS_DOWNLOAD_DIR: ${{ github.workspace }}/.cache/mongodb-binaries
       JWT_ACCESS_SECRET: dummy_jwt_access_secret_for_ci_build_at_least_32_chars
       JWT_REFRESH_SECRET: dummy_jwt_refresh_secret_for_ci_build_at_least_32_chars
-      JWT_ACCESS_EXPIRES_IN: 15m
-      JWT_REFRESH_EXPIRES_IN: 7d
+      ACCESS_TOKEN_TTL_MINUTES: '15'
+      REFRESH_TOKEN_TTL_DAYS: '7'
       CLIENT_URL: http://localhost:3000
-      BCRYPT_SALT_ROUNDS: 10
+      BCRYPT_ROUNDS: '4'
+      AUTO_VERIFY_EMAIL: 'false'
+      TRUST_PROXY: '0'
+      EMAIL_PROVIDER: log
       LOG_LEVEL: silent
 
     steps:
@@ -29,11 +42,18 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # engines field requires >=20.0.0; pin to 20 (LTS) for reproducibility
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Cache mongodb-memory-server binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binaries-${{ env.MONGOMS_VERSION }}
 
       - name: Run linter
         run: npm run lint
@@ -53,4 +73,4 @@ jobs:
       - name: Check OpenAPI specification freshness
         run: |
           npm run openapi:generate
-          git diff --exit-code openapi.json
+          git diff --exit-code --ignore-cr-at-eol openapi.json

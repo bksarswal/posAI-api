@@ -27,5 +27,8 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Local mongodb-memory-server binary cache (CI uses MONGOMS_DOWNLOAD_DIR in workspace)
+.cache/
+
 # Misc
 *.tsbuildinfo
