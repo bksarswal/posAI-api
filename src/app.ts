@@ -32,26 +32,58 @@ export function createApp(options: AppOptions = {}): Express {
   // Reverse proxy trust level (e.g. 1 behind Nginx/ALB/Cloudflare)
   app.set('trust proxy', env.TRUST_PROXY);
 
-  // 1. Request logging (never logs request bodies; header and credential redactions)
+  // 1. Request logging: one concise line per request at info (method, path, status, duration, requestId).
+  // No request/response bodies, no headers, no query strings with tokens. Health & openapi/docs at debug only.
   app.use(
     pinoHttp({
       logger: options.customLogger ?? logger,
-      redact: {
-        paths: [
-          'req.headers.authorization',
-          'req.headers.cookie',
-          'res.headers["set-cookie"]',
-          'req.body.password',
-          'req.body.newPassword',
-          'req.body.currentPassword',
-          'password',
-          'newPassword',
-          'currentPassword',
-          'authorization',
-          'cookie',
-          'set-cookie',
-        ],
-        censor: '[REDACTED]',
+      serializers: {
+        req: () => undefined,
+        res: () => undefined,
+        err: () => undefined,
+      },
+      customProps: (req, res) => {
+        // Return empty on request start to prevent duplicated properties in child logger bindings.
+        // Populate only when response has finished so the final status and full path are emitted once.
+        if (!res.headersSent && !res.writableEnded) {
+          return {};
+        }
+        const fullUrl = req.originalUrl || req.url || '/';
+        const path = fullUrl.split('?')[0] || '/';
+        return {
+          method: req.method,
+          path,
+          status: res.statusCode,
+          requestId: req.id,
+        };
+      },
+      customLogLevel: (req, res, err) => {
+        const fullUrl = req.originalUrl || req.url || '';
+        const path = fullUrl.split('?')[0] || '';
+        if (
+          path === '/health' ||
+          path.startsWith('/api/v1/docs') ||
+          path === '/favicon.ico'
+        ) {
+          return 'debug';
+        }
+        if (res.statusCode >= 500 || err) {
+          return 'error';
+        }
+        if (res.statusCode >= 400) {
+          return 'warn';
+        }
+        return 'info';
+      },
+      customSuccessMessage: (req, res, responseTime) => {
+        const fullUrl = req.originalUrl || req.url || '/';
+        const path = fullUrl.split('?')[0] || '/';
+        return `${req.method} ${path} ${res.statusCode} ${Math.round(responseTime)}ms`;
+      },
+      customErrorMessage: (req, res, err) => {
+        const fullUrl = req.originalUrl || req.url || '/';
+        const path = fullUrl.split('?')[0] || '/';
+        return `${req.method} ${path} ${res.statusCode} - ${err?.message || 'Error'}`;
       },
     }),
   );

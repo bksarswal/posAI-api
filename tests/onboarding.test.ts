@@ -10,6 +10,8 @@ import {
   createTenantAndOwner,
   createStaffUser,
 } from './helpers/authHelpers.js';
+import { Branch } from '../src/modules/branch/index.js';
+import { runWithTenant } from '../src/utils/tenantContext.js';
 import { getOpenAPIDocument } from '../src/config/openapi.js';
 
 describe('Task 8: Onboarding APIs (GET /users/me, Restaurant & Branch APIs)', () => {
@@ -423,7 +425,8 @@ describe('Task 8: Onboarding APIs (GET /users/me, Restaurant & Branch APIs)', ()
     expect(bBadCurr.status).toBe(400);
 
     // 9. Two CONCURRENT first-branch creates -> exactly one isMain=true and no 500
-    const { accessToken: freshOwner } = await createTenantAndOwner({ app });
+    const { tenant: freshTenant, accessToken: freshOwner } =
+      await createTenantAndOwner({ app });
     await request(app)
       .post('/api/v1/restaurant')
       .set('Authorization', `Bearer ${freshOwner}`)
@@ -440,8 +443,32 @@ describe('Task 8: Onboarding APIs (GET /users/me, Restaurant & Branch APIs)', ()
         .send({ ...validBranchPayload, code: 'CONC-2' }),
     ]);
 
+    // Invariant 1: No status >= 500
+    expect(cb1.status).toBeLessThan(500);
+    expect(cb2.status).toBeLessThan(500);
+
+    // Invariant 2: Either [201, 409] (true overlap on isMain=true) or [201, 201] (serialized, second isMain=false)
     const concBranchStatuses = [cb1.status, cb2.status].sort();
-    expect(concBranchStatuses).toEqual([201, 409]);
+    expect([
+      [201, 201],
+      [201, 409],
+    ]).toContainEqual(concBranchStatuses);
+
+    // Invariant 3: DB integrity - query all branches created for this tenant
+    const branchesInDb = await runWithTenant(freshTenant._id, async () => {
+      return Branch.find().lean();
+    });
+
+    // Invariant 4: Exactly ONE branch has isMain=true for that tenant in the DB
+    const mainBranches = branchesInDb.filter((b) => b.isMain === true);
+    expect(mainBranches).toHaveLength(1);
+
+    // Invariant 5: If both returned 201, the DB has 2 branches and the second has isMain=false
+    if (concBranchStatuses[0] === 201 && concBranchStatuses[1] === 201) {
+      expect(branchesInDb).toHaveLength(2);
+      const nonMainBranches = branchesInDb.filter((b) => b.isMain === false);
+      expect(nonMainBranches).toHaveLength(1);
+    }
   });
 
   it('5. Branch reads: OWNER sees all; a MANAGER with branchIds [A] sees only A; a WAITER with empty branchIds sees none; GET :id of an inaccessible branch -> 404; of another tenant branch -> 404; invalid id -> 400', async () => {

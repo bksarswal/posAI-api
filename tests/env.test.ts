@@ -217,6 +217,45 @@ describe('parseEnv', () => {
     });
   });
 
+  describe('LOG_LEVEL configuration', () => {
+    it('defaults LOG_LEVEL to "silent" when NODE_ENV is "test" and LOG_LEVEL is omitted', () => {
+      const config = { ...validConfig };
+      delete (config as Record<string, unknown>)['LOG_LEVEL'];
+      const parsed = parseEnv(config);
+      expect(parsed.LOG_LEVEL).toBe('silent');
+    });
+
+    it('defaults LOG_LEVEL to "info" when NODE_ENV is "development" and LOG_LEVEL is omitted', () => {
+      const config = { ...validConfig, NODE_ENV: 'development' };
+      delete (config as Record<string, unknown>)['LOG_LEVEL'];
+      const parsed = parseEnv(config);
+      expect(parsed.LOG_LEVEL).toBe('info');
+    });
+
+    it('defaults LOG_LEVEL to "info" when NODE_ENV is "production" and LOG_LEVEL is omitted', () => {
+      const config = { ...validProdConfig };
+      delete (config as Record<string, unknown>)['LOG_LEVEL'];
+      const parsed = parseEnv(config);
+      expect(parsed.LOG_LEVEL).toBe('info');
+    });
+
+    it('accepts explicit allowed levels: silent, error, warn, info, debug', () => {
+      const allowed = ['silent', 'error', 'warn', 'info', 'debug'] as const;
+      for (const level of allowed) {
+        const parsed = parseEnv({ ...validConfig, LOG_LEVEL: level });
+        expect(parsed.LOG_LEVEL).toBe(level);
+      }
+    });
+
+    it('rejects disallowed levels like "fatal", "trace", and "verbose"', () => {
+      for (const invalid of ['fatal', 'trace', 'verbose', 'all']) {
+        expect(() =>
+          parseEnv({ ...validConfig, LOG_LEVEL: invalid }),
+        ).toThrowError(/LOG_LEVEL:/);
+      }
+    });
+  });
+
   describe('setEnvForTesting / resetEnvForTesting safety guard', () => {
     const originalNodeEnv = process.env['NODE_ENV'];
 

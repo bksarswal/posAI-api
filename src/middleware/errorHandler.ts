@@ -17,11 +17,14 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): Response {
+  // Strip query string so tokens or sensitive parameters are never logged
+  const path = (req.originalUrl || req.url || '').split('?')[0];
+
   // 1. TenantScopingError (programmer bug / safety violation):
-  // Log at error level, never leak internal tenant details or query message to the client.
+  // Log at error level with full error stack; never leak internal details to client.
   if (err instanceof TenantScopingError) {
     logger.error(
-      { err, method: req.method, url: req.originalUrl },
+      { err, method: req.method, path },
       `Tenant scoping violation: ${err.message}`,
     );
     return sendError(res, {
@@ -34,8 +37,16 @@ export function errorHandler(
   // 2. Controlled application error
   if (err instanceof AppError) {
     if (err.statusCode >= 500) {
-      logger.error(
-        { err, method: req.method, url: req.originalUrl },
+      logger.error({ err, method: req.method, path }, err.message);
+    } else {
+      logger.warn(
+        {
+          code: err.code,
+          message: err.message,
+          statusCode: err.statusCode,
+          method: req.method,
+          path,
+        },
         err.message,
       );
     }
@@ -48,8 +59,18 @@ export function errorHandler(
     });
   }
 
-  // 3. Zod schema validation errors
+  // 3. Zod schema validation errors (4xx at warn: code + message)
   if (err instanceof ZodError) {
+    logger.warn(
+      {
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        method: req.method,
+        path,
+      },
+      'Validation failed',
+    );
+
     const fieldErrors = err.issues.map((issue) => ({
       field: issue.path.join('.'),
       message: issue.message,
@@ -63,8 +84,18 @@ export function errorHandler(
     });
   }
 
-  // 4. Mongoose schema validation errors
+  // 4. Mongoose schema validation errors (4xx at warn: code + message)
   if (err instanceof MongooseError.ValidationError) {
+    logger.warn(
+      {
+        code: 'VALIDATION_ERROR',
+        message: 'Validation failed',
+        method: req.method,
+        path,
+      },
+      'Validation failed',
+    );
+
     const fieldErrors = Object.values(err.errors).map((item) => ({
       field: item.path,
       message: item.message,
@@ -78,8 +109,18 @@ export function errorHandler(
     });
   }
 
-  // 5. Mongoose CastError (e.g. invalid ObjectId)
+  // 5. Mongoose CastError (4xx at warn: code + message)
   if (err instanceof MongooseError.CastError) {
+    logger.warn(
+      {
+        code: 'INVALID_ID',
+        message: `Invalid identifier provided for ${err.path}`,
+        method: req.method,
+        path,
+      },
+      `Invalid identifier provided for ${err.path}`,
+    );
+
     return sendError(res, {
       statusCode: 400,
       message: `Invalid identifier provided for ${err.path}`,
@@ -87,8 +128,7 @@ export function errorHandler(
     });
   }
 
-  // 6. MongoDB duplicate key error (code 11000):
-  // Generic 409 response; never expose keyValue, index names, or collection names.
+  // 6. MongoDB duplicate key error (code 11000, 4xx at warn: code + message, never leak raw keyValue/err)
   if (
     typeof err === 'object' &&
     err !== null &&
@@ -96,8 +136,13 @@ export function errorHandler(
     (err as Record<string, unknown>)['code'] === 11000
   ) {
     logger.warn(
-      { err, method: req.method, url: req.originalUrl },
-      'Duplicate resource conflict (Mongo 11000)',
+      {
+        code: 'DUPLICATE_RESOURCE',
+        message: 'A resource with the specified identifier already exists',
+        method: req.method,
+        path,
+      },
+      'Duplicate resource conflict',
     );
     return sendError(res, {
       statusCode: 409,
@@ -106,11 +151,8 @@ export function errorHandler(
     });
   }
 
-  // 7. Unknown or unhandled error
-  logger.error(
-    { err, method: req.method, url: req.originalUrl },
-    'Unhandled server error',
-  );
+  // 7. Unknown or unhandled error (5xx with full stack at error level)
+  logger.error({ err, method: req.method, path }, 'Unhandled server error');
 
   const message =
     env.NODE_ENV === 'production'

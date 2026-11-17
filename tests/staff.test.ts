@@ -823,69 +823,74 @@ describe('Task 9: Staff Management APIs (/api/v1/users)', () => {
   });
 
   it('10. Audit log is emitted for create, update and reset; temporary password never appears in any log line', async () => {
-    const infoSpy = vi.spyOn(logger, 'info');
+    // Capture logger.info silently without raising global logger.level or printing to the console
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
 
-    const { accessToken: ownerToken } = await createTenantAndOwner({ app });
-    const { branch } = await createTestRestaurantAndBranch(app, ownerToken);
+    try {
+      const { accessToken: ownerToken } = await createTenantAndOwner({ app });
+      const { branch } = await createTestRestaurantAndBranch(app, ownerToken);
 
-    // 1. Create staff
-    const resCreate = await request(app)
-      .post('/api/v1/users')
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        name: 'Audit Staff',
-        email: 'audit-staff@test.com',
-        role: 'WAITER',
-        branchIds: [branch.id],
-      });
-    expect(resCreate.status).toBe(201);
-    const tempPassword1 = resCreate.body.data.temporaryPassword;
-    const staffId = resCreate.body.data.user.id;
+      // 1. Create staff
+      const resCreate = await request(app)
+        .post('/api/v1/users')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          name: 'Audit Staff',
+          email: 'audit-staff@test.com',
+          role: 'WAITER',
+          branchIds: [branch.id],
+        });
+      expect(resCreate.status).toBe(201);
+      const tempPassword1 = resCreate.body.data.temporaryPassword;
+      const staffId = resCreate.body.data.user.id;
 
-    // 2. Update staff
-    const resUpdate = await request(app)
-      .patch(`/api/v1/users/${staffId}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ name: 'Audit Staff Updated' });
-    expect(resUpdate.status).toBe(200);
+      // 2. Update staff
+      const resUpdate = await request(app)
+        .patch(`/api/v1/users/${staffId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'Audit Staff Updated' });
+      expect(resUpdate.status).toBe(200);
 
-    // 3. Reset password
-    const resReset = await request(app)
-      .post(`/api/v1/users/${staffId}/reset-password`)
-      .set('Authorization', `Bearer ${ownerToken}`);
-    expect(resReset.status).toBe(200);
-    const tempPassword2 = resReset.body.data.temporaryPassword;
+      // 3. Reset password
+      const resReset = await request(app)
+        .post(`/api/v1/users/${staffId}/reset-password`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(resReset.status).toBe(200);
+      const tempPassword2 = resReset.body.data.temporaryPassword;
 
-    // Verify audit logs were captured
-    const auditCalls = infoSpy.mock.calls.filter(
-      ([obj]) =>
-        typeof obj === 'object' &&
-        obj !== null &&
-        'audit' in obj &&
-        obj.audit === true,
-    );
-    expect(auditCalls.length).toBeGreaterThanOrEqual(3);
+      // Verify audit logs were captured
+      const auditCalls = infoSpy.mock.calls.filter(
+        ([obj]) =>
+          typeof obj === 'object' &&
+          obj !== null &&
+          'audit' in obj &&
+          obj.audit === true,
+      );
+      expect(auditCalls.length).toBeGreaterThanOrEqual(3);
 
-    // Check actions
-    const actions = auditCalls.map(
-      ([obj]) => (obj as Record<string, unknown>)['action'],
-    );
-    expect(actions).toContain('STAFF_USER_CREATED');
-    expect(actions).toContain('STAFF_USER_UPDATED');
-    expect(actions).toContain('STAFF_USER_PASSWORD_RESET');
+      // Check actions
+      const actions = auditCalls.map(
+        ([obj]) => (obj as Record<string, unknown>)['action'],
+      );
+      expect(actions).toContain('STAFF_USER_CREATED');
+      expect(actions).toContain('STAFF_USER_UPDATED');
+      expect(actions).toContain('STAFF_USER_PASSWORD_RESET');
 
-    // Crucial check: Temporary passwords NEVER appear in audit log calls or any string log argument
-    const serializedAuditCalls = JSON.stringify(auditCalls);
-    expect(serializedAuditCalls.includes(tempPassword1)).toBe(false);
-    expect(serializedAuditCalls.includes(tempPassword2)).toBe(false);
+      // Crucial check: Temporary passwords NEVER appear in audit log calls or any string log argument
+      const serializedAuditCalls = JSON.stringify(auditCalls);
+      expect(serializedAuditCalls.includes(tempPassword1)).toBe(false);
+      expect(serializedAuditCalls.includes(tempPassword2)).toBe(false);
 
-    for (const callArgs of infoSpy.mock.calls) {
-      for (const arg of callArgs) {
-        if (typeof arg === 'string') {
-          expect(arg.includes(tempPassword1)).toBe(false);
-          expect(arg.includes(tempPassword2)).toBe(false);
+      for (const callArgs of infoSpy.mock.calls) {
+        for (const arg of callArgs) {
+          if (typeof arg === 'string') {
+            expect(arg.includes(tempPassword1)).toBe(false);
+            expect(arg.includes(tempPassword2)).toBe(false);
+          }
         }
       }
+    } finally {
+      infoSpy.mockRestore();
     }
   });
 

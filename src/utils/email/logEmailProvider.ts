@@ -6,12 +6,12 @@ import type {
 
 /**
  * Development & test email provider that logs the full email message
- * (including links and tokens) at info level.
+ * (including links and tokens) at debug level for local dev inspection.
  * Blocked from running in production environments by env validation.
  */
 export class LogEmailProvider implements EmailProvider {
   async send(options: SendEmailOptions): Promise<void> {
-    logger.info(
+    logger.debug(
       {
         to: options.to,
         subject: options.subject,

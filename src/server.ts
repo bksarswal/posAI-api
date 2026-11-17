@@ -18,7 +18,7 @@ async function startServer(): Promise<void> {
 
     server = app.listen(env.PORT, () => {
       logger.info(
-        `Server running at http://localhost:${env.PORT} in ${env.NODE_ENV} mode`,
+        `Server running on port ${env.PORT} in ${env.NODE_ENV} mode (db connected)`,
       );
     });
   } catch (error) {

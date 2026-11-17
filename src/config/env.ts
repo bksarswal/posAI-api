@@ -51,10 +51,12 @@ export const envSchema = z
     SMTP_USER: z.string().min(1, 'SMTP_USER cannot be empty').optional(),
     SMTP_PASS: z.string().min(1, 'SMTP_PASS cannot be empty').optional(),
 
-    LOG_LEVEL: z
-      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
-      .default('info'),
+    LOG_LEVEL: z.enum(['silent', 'error', 'warn', 'info', 'debug']).optional(),
   })
+  .transform((data) => ({
+    ...data,
+    LOG_LEVEL: data.LOG_LEVEL ?? (data.NODE_ENV === 'test' ? 'silent' : 'info'),
+  }))
   .superRefine((data, ctx) => {
     if (data.EMAIL_PROVIDER === 'smtp') {
       if (!data.EMAIL_FROM) {
