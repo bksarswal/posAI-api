@@ -132,6 +132,21 @@ export const signup = async (req: Request, res: Response) => {};
 - Keep functions small. Avoid duplicate code.
 - Prefer consistency over cleverness.
 
+### Code Style Rules
+
+- **ES Modules Only**: Always use ES module syntax (`import`/`export`). Never use CommonJS `require()`, `module.exports`, or `exports`. All relative imports must include the `.js` extension (e.g. `import * as AuthService from './auth.service.js';`).
+- **Native Express Body Parsers**: Use built-in `express.json()` and `express.urlencoded()`. Never install or import the standalone `body-parser` package directly.
+- **Node Built-in Prefix**: Always use the `node:` protocol prefix when importing Node.js built-ins (e.g. `import crypto from 'node:crypto';`, `import path from 'node:path';`, `import fs from 'node:fs';`).
+- **Clean Code & Unused Variables**: Always remove unused imports, variables, and parameters before finishing (ESLint `no-unused-vars` is treated as a fatal error).
+- **Never Log Sensitive Data**: Never log passwords, temporary passwords, raw tokens (access/refresh/verification/reset), credentials, SMTP secrets, full request bodies, Authorization headers, or Cookie headers. Sensitive fields must be included in the Pino logger redaction list.
+- **New Endpoint Checklist**: When adding any new endpoint:
+  1. Define request and response schemas in `<feature>.validation.ts` with strict validation (`.strict()`).
+  2. Register the route with the OpenAPI registry in `<feature>.route.ts`.
+  3. Enforce tenant scoping via JWT authentication and tenant context (never accept `tenantId` from client body or params).
+  4. Regenerate `openapi.json` using `npm run openapi:generate`.
+  5. Add the operation to the tenant-isolation matrix in `tests/tenantIsolation.test.ts` (or mark exempt with a valid reason).
+  6. Add the operation to the mass-assignment matrix in `tests/massAssignment.test.ts` (or mark exempt with a valid reason).
+
 ## Naming
 
 `<feature>.controller.ts`, `.service.ts`, `.model.ts`, `.validation.ts`, `.interface.ts`, `.types.ts`, `.route.ts`. (Deliberate exception: `src/modules/auth/refreshToken.*` and `src/modules/auth/authToken.*` because these token models and helper services belong to the auth module).
